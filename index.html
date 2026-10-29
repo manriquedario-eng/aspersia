@@ -45,6 +45,7 @@
     <div class="pestanas" role="tablist">
       <a role="tab" data-pestana="cliente">Cliente</a>
       <a role="tab" data-pestana="diseno">Diseño</a>
+      <a role="tab" data-pestana="plano">Plano</a>
       <a role="tab" data-pestana="presupuesto">Presupuesto</a>
     </div>
 
@@ -116,6 +117,43 @@
             <input id="accesorios" type="number" inputmode="decimal" step="1" min="0"></label>
         </details>
       </section>
+
+      <section class="tarjeta">
+        <h2>Consultar a Claude</h2>
+        <p class="ayuda arriba">Arma un resumen técnico de la obra (presiones, caudales, avisos y cobertura del plano) para pegarlo en la app de Claude y pedirle recomendaciones.</p>
+        <button id="consultar-claude" class="principal ancho" type="button">Preparar consulta</button>
+        <p class="ayuda" id="consulta-resultado"></p>
+      </section>
+    </div>
+
+    <!-- Plano -->
+    <div id="panel-plano" class="panel">
+      <section class="tarjeta">
+        <h2>Terreno</h2>
+        <div class="campos dos">
+          <label>Ancho <span class="unidad">m</span><input id="plano-ancho" type="number" inputmode="decimal" min="1" step="0.5"></label>
+          <label>Largo <span class="unidad">m</span><input id="plano-largo" type="number" inputmode="decimal" min="1" step="0.5"></label>
+        </div>
+        <label class="tilde"><input id="plano-distancias" type="checkbox"> Calcular los caños con las distancias del plano</label>
+        <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto.</p>
+      </section>
+
+      <section class="tarjeta plano-tarjeta">
+        <div id="plano-filtro" class="filtro"></div>
+        <div class="plano-caja">
+          <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
+          <div id="plano-botones" class="plano-botones">
+            <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
+            <button type="button" data-zoom="menos" aria-label="Alejar">−</button>
+            <button type="button" data-zoom="ajustar" aria-label="Ver todo el terreno">⤢</button>
+          </div>
+        </div>
+        <label class="tilde"><input id="plano-cobertura" type="checkbox"> Ver cobertura</label>
+        <div id="plano-estadisticas" class="estadisticas"></div>
+        <p class="ayuda leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
+      </section>
+
+      <section class="tarjeta" id="plano-seleccion"></section>
     </div>
 
     <!-- Presupuesto -->
@@ -290,6 +328,8 @@
 <script src="app/calculo.js"></script>
 <script src="app/presupuesto.js"></script>
 <script src="app/almacen.js"></script>
+<script src="app/geometria.js"></script>
+<script src="app/plano.js"></script>
 <script src="app/vendor/jspdf-2.5.1.umd.min.js"></script>
 <script src="app/vendor/jspdf-autotable-3.8.2.min.js"></script>
 <script src="app/pdf.js"></script>

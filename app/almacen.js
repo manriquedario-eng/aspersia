@@ -27,6 +27,7 @@
       fuente: { tipo: 'presion', bar: 3, linea: 'ZETA', modelo: 'ZETA 2', aspiracion: 0 },
       accesorios: 10,
       sectores: [sectorNuevo(1)],
+      plano: planoNuevo(),
       presupuesto: {
         numero, fecha: hoy(), validez: 15,
         formaPago: '50 % al aceptar y 50 % al terminar la obra.',
@@ -65,10 +66,13 @@
   function completar(datos) {
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
+      o.plano ||= planoNuevo();
       for (const s of o.sectores) s.superficie ??= 0;
     }
     return datos;
   }
+  // Terreno del plano en metros. Las posiciones de aspersores y válvulas se guardan en cada sector.
+  const planoNuevo = () => ({ ancho: 20, largo: 15, fuente: { x: 0.5, y: 0.5 }, distanciasDesdePlano: false, verCobertura: true });
   function guardar(datos) {
     try { localStorage.setItem(CLAVE, JSON.stringify(datos)); return true; } catch { return false; }
   }

@@ -108,7 +108,7 @@
         if (!(i >= 0 && i < obra.sectores.length)) return ir(`#/obra/${obra.id}/diseno`);
         return abrirSector(i);
       }
-      return abrirObra(['cliente', 'diseno', 'presupuesto'].includes(sub) ? sub : 'diseno');
+      return abrirObra(['cliente', 'diseno', 'plano', 'presupuesto'].includes(sub) ? sub : 'diseno');
     }
     obra = null;
     if (seccion === 'precios') { mostrar('precios'); subtitulo('Lista de precios'); return pintarPrecios(); }
@@ -156,11 +156,126 @@
       a.href = `#/obra/${obra.id}/${a.dataset.pestana}`;
       a.setAttribute('aria-selected', a.dataset.pestana === p);
     });
-    for (const panel of ['cliente', 'diseno', 'presupuesto']) $(`panel-${panel}`).hidden = panel !== p;
+    for (const panel of ['cliente', 'diseno', 'plano', 'presupuesto']) $(`panel-${panel}`).hidden = panel !== p;
     if (p === 'cliente') pintarCliente();
-    if (p === 'diseno') { armarFuente(); pintarDiseno(); }
+    if (p === 'diseno') { armarFuente(); pintarDiseno(); $('consulta-resultado').textContent = ''; }
+    if (p === 'plano') abrirPlano();
     if (p === 'presupuesto') pintarPresupuesto();
   }
+
+  // =====================================================================
+  // Plano
+  // =====================================================================
+  const GEO = window.GEOMETRIA;
+  const r1 = v => Math.round(v * 10) / 10;
+  const usaPlano = () => obra.plano && obra.plano.distanciasDesdePlano;
+
+  // Aspersores con lo que hace falta para dibujarlos: posición, giro, alcance real (con la presión que les llega) y arco.
+  function aspersoresDelPlano() {
+    const lista = [];
+    obra.sectores.forEach((s, k) => {
+      const c = calcular(s);
+      s.aspersores.forEach((a, i) => {
+        const e = R.emisor(idEmisor(a));
+        const radio = c.r ? c.r.aspersores[i].radio : e.radios[Math.floor(e.radios.length / 2)];
+        const franja = e.tipo === 'MP Rotator de franja' ? (/LCS/.test(e.boquilla) ? 'LCS' : /RCS/.test(e.boquilla) ? 'RCS' : 'SS') : null;
+        const arco = e.arco ?? a.arco ?? 360;
+        lista.push({ s: k, i, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre });
+      });
+    });
+    return lista;
+  }
+
+  // Con "calcular los caños con las distancias del plano", las distancias y el largo hasta cada válvula salen de las posiciones.
+  function sincronizarDistancias() {
+    if (!usaPlano()) return;
+    GEO.ubicarSinPosicion(obra.plano, obra.sectores);
+    const f = obra.plano.fuente;
+    for (const s of obra.sectores) {
+      GEO.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => s.aspersores[i].distancia = d);
+      s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
+    }
+  }
+
+  function abrirPlano() {
+    GEO.ubicarSinPosicion(obra.plano, obra.sectores);
+    sincronizarDistancias();
+    $('plano-ancho').value = obra.plano.ancho;
+    $('plano-largo').value = obra.plano.largo;
+    $('plano-distancias').checked = usaPlano();
+    $('plano-cobertura').checked = obra.plano.verCobertura;
+    guardar();
+    PLANO.iniciar({
+      obra, svg: $('plano-svg'), botones: $('plano-botones'), seleccion: $('plano-seleccion'),
+      estadisticas: $('plano-estadisticas'), filtro: $('plano-filtro'),
+      aspersores: aspersoresDelPlano,
+      alCambiar: () => { sincronizarDistancias(); guardar(); },
+    });
+  }
+  const medidaTerreno = (campo, v) => {
+    obra.plano[campo] = Math.max(1, Math.min(500, decimal(v)));
+    for (const s of obra.sectores) for (const p of [s.valvulaPos, ...s.aspersores]) if (p) {
+      p.x = Math.min(obra.plano.ancho, p.x ?? 0); p.y = Math.min(obra.plano.largo, p.y ?? 0);
+    }
+    sincronizarDistancias(); guardar();
+    PLANO.iniciar({ ...planoActual() });
+  };
+  const planoActual = () => ({
+    obra, svg: $('plano-svg'), botones: $('plano-botones'), seleccion: $('plano-seleccion'),
+    estadisticas: $('plano-estadisticas'), filtro: $('plano-filtro'), aspersores: aspersoresDelPlano,
+    alCambiar: () => { sincronizarDistancias(); guardar(); },
+  });
+  $('plano-ancho').addEventListener('change', ev => medidaTerreno('ancho', ev.target.value));
+  $('plano-largo').addEventListener('change', ev => medidaTerreno('largo', ev.target.value));
+  $('plano-distancias').addEventListener('change', ev => { obra.plano.distanciasDesdePlano = ev.target.checked; sincronizarDistancias(); guardar(); PLANO.pintar(); });
+  $('plano-cobertura').addEventListener('change', ev => { obra.plano.verCobertura = ev.target.checked; guardar(); PLANO.pintar(); });
+
+  // =====================================================================
+  // Consultar a Claude: resumen técnico para pegar en la app de Claude
+  // =====================================================================
+  function resumenParaClaude() {
+    const L = [];
+    L.push('Sos un especialista en riego por aspersión residencial con productos Hunter. Revisá este diseño y decime qué mejorarías (boquillas, presiones, caños, cobertura, sectorización). Respondé en castellano.');
+    L.push('');
+    L.push(`OBRA: ${nombreObra(obra)}${obra.cliente.localidad ? ` (${obra.cliente.localidad})` : ''}`);
+    L.push(obra.fuente.tipo === 'bomba'
+      ? `Fuente: bomba Czerweny ${obra.fuente.modelo}, altura de aspiración ${fmt(obra.fuente.aspiracion, 1)} m.`
+      : `Fuente: red con ${fmt(obra.fuente.bar, 1)} bar disponibles con el agua corriendo.`);
+    if (obra.plano) L.push(`Terreno del plano: ${fmt(obra.plano.ancho, 1)} × ${fmt(obra.plano.largo, 1)} m.`);
+    obra.sectores.forEach((s, k) => {
+      const c = calcular(s);
+      L.push('');
+      L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
+      L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm.`);
+      if (c.error) { L.push(`Error de cálculo: ${c.error}`); return; }
+      c.r.aspersores.forEach((a, i) => {
+        const asp = s.aspersores[i];
+        L.push(`  ${a.n}. ${a.emisor.tipo} ${a.emisor.nombre}${a.regulador ? ` en cuerpo ${a.regulador}` : ''} · a ${fmt(asp.distancia, 1)} m del anterior · ` +
+          `${fmt(a.presionBoquilla, 2)} bar en la boquilla · ${fmt(a.caudal, 2)} l/min · alcance ${fmt(a.radio, 1)} m` +
+          (asp.x != null ? ` · posición (${fmt(asp.x, 1)}; ${fmt(asp.y, 1)}) m, giro ${Math.round(asp.giro || 0)}°` : ''));
+      });
+      L.push(`Total del sector: ${fmt(c.r.caudalTotal, 1)} l/min · variación de presión ${fmt(c.r.variacion, 0)} % · caño recomendado ${c.rec.recomendado ? c.rec.recomendado + ' mm' : 'ninguno cumple'}.`);
+      for (const a of c.r.avisos) L.push(`  Aviso (${a.nivel}): ${a.texto}`);
+    });
+    if (obra.plano && obra.sectores.every(s => s.aspersores.every(a => a.x != null))) {
+      const cob = GEO.cobertura(obra.plano, aspersoresDelPlano());
+      L.push('');
+      L.push(`COBERTURA DEL PLANO (todos los sectores): ${fmt(cob.seco, 0)} % seco, ${fmt(cob.uno, 0)} % con un solo aspersor, ${fmt(cob.bien, 0)} % bien cubierto.`);
+    }
+    L.push('');
+    L.push('Datos calculados con Aspersia (catálogo Hunter 2026, curvas Czerweny, pérdidas por Hazen-Williams).');
+    return L.join('\n');
+  }
+  $('consultar-claude').addEventListener('click', async () => {
+    const texto = resumenParaClaude();
+    const fin = t => $('consulta-resultado').textContent = t;
+    if (navigator.share) {
+      try { await navigator.share({ title: `Consulta de riego: ${nombreObra(obra)}`, text: texto }); return fin('Listo. Pegalo o compartilo con Claude.'); }
+      catch (err) { if (err.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(texto); fin('Copiado. Abrí la app de Claude y pegalo en un mensaje nuevo.'); }
+    catch { fin('No se pudo copiar automáticamente.'); }
+  });
 
   // ---------- Cliente ----------
   function pintarCliente() {
@@ -285,7 +400,9 @@
     $('sector-superficie').value = s.superficie || '';
     s.alimentacion.material = opciones($('alim-material'), materiales, s.alimentacion.material);
     s.alimentacion.nominal = Number(opciones($('alim-nominal'), diametros(s.alimentacion.material), s.alimentacion.nominal));
+    sincronizarDistancias();
     $('alim-largo').value = s.alimentacion.largo;
+    $('alim-largo').disabled = usaPlano();
     $('alim-desnivel').value = s.alimentacion.desnivel;
     $('valvula').checked = s.valvula;
     s.lateral.material = opciones($('lat-material'), materiales, s.lateral.material);
@@ -356,9 +473,10 @@
     if (!conCuerpo) a.regulador = '';
     campo('regulador').value = a.regulador || '';
     campo('distancia').value = a.distancia;
+    campo('distancia').disabled = usaPlano();
     campo('altura').value = a.altura;
     li.querySelector('.numero').textContent = i + 1;
-    li.querySelector('[data-texto=distancia]').textContent = i ? 'Distancia al anterior' : 'Distancia a la válvula';
+    li.querySelector('[data-texto=distancia]').textContent = (i ? 'Distancia al anterior' : 'Distancia a la válvula') + (usaPlano() ? ' (del plano)' : '');
     li.querySelector('.resumen').textContent = `${e.tipo} ${e.nombre}${a.tipo === 'Turbina PGP Ultra' ? ` a ${a.arco}°` : ''}`;
   }
   lista.addEventListener('input', ev => {
@@ -382,14 +500,22 @@
     if (!accion) return;
     const i = Number(ev.target.closest('.aspersor').dataset.i);
     const asps = sector().aspersores;
-    if (accion === 'copiar') asps.splice(i + 1, 0, { ...asps[i] });
+    if (accion === 'copiar') asps.splice(i + 1, 0, desplazado(asps[i]));
     if (accion === 'borrar') { if (asps.length === 1) return; asps.splice(i, 1); }
+    sincronizarDistancias();
     armarAspersores();
     pintarSector();
   });
+  // Copia de un aspersor corrida en el plano (si no, quedaría encima del original y a distancia 0).
+  function desplazado(a) {
+    const b = { ...a };
+    if (a.x != null) b.x = r1(Math.min(obra.plano.ancho, a.x + Math.max(1, a.distancia || 3)));
+    return b;
+  }
   $('agregar').addEventListener('click', () => {
     const asps = sector().aspersores;
-    asps.push({ ...asps.at(-1) });
+    asps.push(desplazado(asps.at(-1)));
+    sincronizarDistancias();
     armarAspersores();
     pintarSector();
     lista.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
