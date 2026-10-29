@@ -93,7 +93,7 @@ main { max-width: 720px; margin: 0 auto; padding: 12px 16px calc(32px + env(safe
 label { display: block; font-size: .85rem; color: var(--suave); min-width: 0; }
 label > input, label > select { display: block; margin-top: 4px; }
 .unidad { font-size: .75rem; opacity: .8; }
-input[type=number], input[type=text], select {
+input[type=number], input[type=text], input[type=tel], input[type=email], input[type=date], select, textarea {
   width: 100%; max-width: 100%;
   text-overflow: ellipsis;
   font: inherit;
@@ -105,7 +105,75 @@ input[type=number], input[type=text], select {
   padding: 9px 10px;
   min-height: 44px;
 }
-input:focus, select:focus { outline: 2px solid var(--agua); outline-offset: 1px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--agua); outline-offset: 1px; }
+textarea { resize: vertical; line-height: 1.4; display: block; margin-top: 4px; }
+input:disabled, textarea:disabled, select:disabled { opacity: .7; background: var(--fondo); }
+a { color: var(--primario); }
+.separado { margin-top: 12px; }
+.centro { text-align: center; }
+
+/* Menú de inicio */
+.menu { display: grid; gap: 8px; }
+.menu-item {
+  display: grid; gap: 2px; text-decoration: none; color: var(--tinta);
+  background: var(--papel); border: 1px solid var(--linea); border-radius: 14px; padding: 12px 16px;
+}
+.menu-item b { color: var(--primario); }
+.menu-item b::after { content: ' ›'; color: var(--suave); }
+.menu-item span { font-size: .82rem; color: var(--suave); }
+.vacio { display: grid; gap: 4px; padding: 6px 2px 2px; }
+.vacio span { font-size: .85rem; color: var(--suave); }
+
+/* Pestañas de la obra */
+.pestanas {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 12px;
+  background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 4px;
+  position: sticky; top: 0; z-index: 2;
+}
+.pestanas a {
+  text-align: center; text-decoration: none; color: var(--suave); font-weight: 600; font-size: .92rem;
+  border-radius: 9px; padding: 9px 4px; min-height: 40px;
+}
+.pestanas a[aria-selected=true] { background: var(--primario); color: #fff; }
+@media (prefers-color-scheme: dark) { .pestanas a[aria-selected=true] { color: #0b1a2c; } }
+
+/* Renglones del presupuesto */
+.rubro { color: var(--primario); font-size: .95rem; margin: 16px 0 8px; border-bottom: 2px solid var(--primario-claro); padding-bottom: 4px; }
+.renglon { border: 1px solid var(--linea); border-radius: 12px; padding: 8px 10px 10px; margin-bottom: 8px; min-width: 0; }
+.renglon.sin-precio { border-style: dashed; border-color: var(--aviso); }
+.renglon-fila { display: flex; gap: 6px; align-items: center; }
+.renglon-fila input { flex: 1; min-width: 0; font-weight: 600; }
+.renglon-numeros { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; align-items: end; }
+.importe { display: grid; text-align: right; padding-bottom: 10px; min-width: 0; }
+.importe b { font-variant-numeric: tabular-nums; color: var(--primario-oscuro); overflow: hidden; text-overflow: ellipsis; }
+.quitar {
+  flex: none; width: 40px; height: 44px; border: 1px solid var(--linea); border-radius: 10px;
+  background: transparent; color: var(--suave); font-size: 1.3rem; line-height: 1;
+}
+.enlace { border: 0; background: transparent; color: var(--primario); text-decoration: underline; padding: 0; font-size: inherit; }
+.cerrado { background: var(--aviso-fondo); border-left: 4px solid var(--aviso); border-radius: 0; padding: 10px 12px; margin-bottom: 12px; font-size: .9rem; }
+.cerrado .chico { margin-top: 8px; display: block; background: var(--papel); }
+
+/* Totales */
+table.totales { margin-top: 12px; font-size: .95rem; }
+table.totales td { padding: 6px 4px; }
+table.totales td:last-child { text-align: right; }
+.total-final td { font-size: 1.2rem; font-weight: 800; color: var(--primario-oscuro); border-bottom: 0; border-top: 2px solid var(--primario); padding-top: 10px; }
+
+/* Botones principales */
+.botonera { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 6px; }
+.principal {
+  display: block; text-align: center; min-height: 48px; padding: 12px; border-radius: 12px; font-weight: 700; font-size: 1rem;
+  border: 2px solid var(--primario); background: var(--papel); color: var(--primario);
+}
+.principal.lleno { background: var(--primario); color: #fff; }
+@media (prefers-color-scheme: dark) { .principal.lleno { color: #0b1a2c; } }
+.principal:disabled { opacity: .6; }
+.ancho { width: 100%; margin-top: 8px; }
+.archivo { cursor: pointer; }
+.archivo input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.peligro { color: var(--error); border-color: var(--error); }
+.precio-item { margin-bottom: 10px; color: var(--tinta); }
 
 .opciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .opciones label, .tilde {
@@ -124,7 +192,7 @@ input[type=radio], input[type=checkbox] { width: 20px; height: 20px; accent-colo
 /* Lista de sectores de la obra */
 .sectores { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .sector-tarjeta {
-  width: 100%; text-align: left; display: grid; gap: 3px;
+  width: 100%; text-align: left; display: grid; gap: 3px; text-decoration: none;
   background: var(--campo); color: var(--tinta);
   border: 1px solid var(--linea); border-left: 4px solid var(--agua); border-radius: 12px; padding: 10px 12px; min-height: 64px;
 }
@@ -141,8 +209,8 @@ input[type=radio], input[type=checkbox] { width: 20px; height: 20px; accent-colo
 
 /* Vista de un sector */
 .volver {
-  border: 0; background: transparent; color: var(--primario); font-weight: 600;
-  font-size: 1rem; padding: 8px 0; min-height: 44px; margin-bottom: 4px;
+  display: inline-block; border: 0; background: transparent; color: var(--primario); font-weight: 600; text-decoration: none;
+  font-size: 1rem; padding: 10px 0; min-height: 44px; margin-bottom: 2px;
 }
 .acciones { display: flex; gap: 8px; margin-top: 10px; }
 .chico:disabled { opacity: .4; }

@@ -1,17 +1,23 @@
 // Modo sin señal: guarda la app en el teléfono la primera vez y después la abre desde ahí.
 // Cuando hay señal, baja en segundo plano la versión nueva, que se ve la próxima vez que se abre.
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
-const VERSION = 'aspersia-v3';
+const VERSION = 'aspersia-v4';
 const ARCHIVOS = [
   './',
   'index.html',
   'manifest.webmanifest',
   'app/estilos.css',
   'app/calculo.js',
+  'app/presupuesto.js',
+  'app/almacen.js',
+  'app/pdf.js',
   'app/pantalla.js',
+  'app/vendor/jspdf-2.5.1.umd.min.js',
+  'app/vendor/jspdf-autotable-3.8.2.min.js',
   'datos/hunter-2026.js',
   'datos/czerweny.js',
   'app/marca/marca.png',
+  'app/marca/logo-pdf.png',
   'app/iconos/icono-180.png',
   'app/iconos/icono-192.png',
   'app/iconos/icono-512.png',

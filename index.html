@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Aspersia">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>Aspersia · Cálculo de riego</title>
+<title>Aspersia · Riegos Tecnológicos</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="app/iconos/icono-180.png">
 <link rel="icon" type="image/png" href="app/iconos/icono-192.png">
@@ -25,64 +25,157 @@
 </header>
 
 <main>
-  <!-- ===================== Vista de la obra ===================== -->
-  <div id="vista-obra">
+  <!-- ===================== Inicio: obras ===================== -->
+  <div id="vista-inicio" class="vista">
     <section class="tarjeta">
-      <h2>Obra</h2>
-      <label>Nombre de la obra
-        <input id="obra-nombre" type="text" placeholder="Por ejemplo: Casa Pérez" autocomplete="off"></label>
+      <h2>Obras</h2>
+      <ul id="lista-obras" class="sectores"></ul>
+      <button id="nueva-obra" class="boton" type="button">+ Nueva obra</button>
     </section>
-
-    <section class="tarjeta">
-      <h2>De dónde sale el agua</h2>
-      <p class="ayuda arriba">Es la misma para todos los sectores de la obra.</p>
-      <div class="opciones" role="radiogroup">
-        <label><input type="radio" name="fuente" value="presion"> Red o presión conocida</label>
-        <label><input type="radio" name="fuente" value="bomba"> Bomba Czerweny</label>
-      </div>
-      <div id="fuente-presion" class="campos">
-        <label>Presión disponible <span class="unidad">bar</span>
-          <input id="presion" type="number" inputmode="decimal" step="0.1" min="0"></label>
-        <p class="ayuda">La que marca el manómetro con el agua corriendo.</p>
-      </div>
-      <div id="fuente-bomba" class="campos">
-        <label>Línea <select id="bomba-linea"></select></label>
-        <p class="ayuda" id="bomba-uso"></p>
-        <label>Modelo <select id="bomba-modelo"></select></label>
-        <label>Altura de aspiración <span class="unidad">m</span>
-          <input id="aspiracion" type="number" inputmode="decimal" step="0.5" min="0"></label>
-        <p class="ayuda">Cuántos metros sube el agua desde el pozo o la cisterna hasta la bomba (0 si está a nivel o por debajo).</p>
-      </div>
-    </section>
-
-    <section class="tarjeta">
-      <h2>Sectores</h2>
-      <p class="ayuda arriba">Cada sector es una válvula con sus aspersores. Riegan de a uno. Tocá un sector para cargarlo.</p>
-      <ul id="lista-sectores" class="sectores"></ul>
-      <button id="agregar-sector" class="boton" type="button">+ Agregar sector</button>
-    </section>
-
-    <section class="tarjeta" aria-live="polite">
-      <h2>Resumen de la obra</h2>
-      <div id="resumen-obra"></div>
-      <details class="ajustes">
-        <summary>Ajustes</summary>
-        <label>Pérdida por codos, tes y accesorios <span class="unidad">% de la fricción</span>
-          <input id="accesorios" type="number" inputmode="decimal" step="1" min="0"></label>
-      </details>
-    </section>
+    <nav class="menu">
+      <a href="#/precios" class="menu-item"><b>Lista de precios</b><span>Lo que cobrás por cada material y por m²</span></a>
+      <a href="#/datos" class="menu-item"><b>Mis datos</b><span>Lo que sale arriba en tus presupuestos</span></a>
+      <a href="#/copia" class="menu-item"><b>Copia de seguridad</b><span>Guardá o recuperá todas tus obras</span></a>
+    </nav>
   </div>
 
-  <!-- ===================== Vista de un sector ===================== -->
-  <div id="vista-sector" hidden>
-    <button id="volver" class="volver" type="button">‹ Volver a la obra</button>
+  <!-- ===================== Obra ===================== -->
+  <div id="vista-obra" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <div class="pestanas" role="tablist">
+      <a role="tab" data-pestana="cliente">Cliente</a>
+      <a role="tab" data-pestana="diseno">Diseño</a>
+      <a role="tab" data-pestana="presupuesto">Presupuesto</a>
+    </div>
+
+    <!-- Cliente -->
+    <div id="panel-cliente" class="panel">
+      <section class="tarjeta">
+        <h2>Cliente</h2>
+        <div class="campos">
+          <label>Nombre y apellido <input data-cliente="nombre" type="text" autocomplete="off" placeholder="Juan Pérez"></label>
+          <label>Dirección <input data-cliente="direccion" type="text" autocomplete="off" placeholder="Av. San Martín 1234"></label>
+          <label>Localidad <input data-cliente="localidad" type="text" autocomplete="off" placeholder="Rosario"></label>
+          <div class="campos dos">
+            <label>Teléfono <input data-cliente="telefono" type="tel" autocomplete="off" placeholder="341 555 1234"></label>
+            <label>Correo <input data-cliente="correo" type="email" autocomplete="off" placeholder="juan@correo.com"></label>
+          </div>
+        </div>
+      </section>
+      <section class="tarjeta">
+        <h2>Obra</h2>
+        <div class="campos">
+          <label>Nombre de la obra <input id="obra-nombre" type="text" autocomplete="off" placeholder="Casa Pérez"></label>
+          <label>Estado <select id="obra-estado"></select></label>
+        </div>
+        <p class="ayuda">Al pasar a Enviado o Aceptado, el presupuesto queda cerrado: ya no cambia si tocás el diseño o los precios.</p>
+        <div class="acciones">
+          <button id="duplicar-obra" class="chico" type="button">Duplicar obra</button>
+          <button id="borrar-obra" class="chico peligro" type="button">Borrar obra</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Diseño -->
+    <div id="panel-diseno" class="panel">
+      <section class="tarjeta">
+        <h2>De dónde sale el agua</h2>
+        <p class="ayuda arriba">Es la misma para todos los sectores de la obra.</p>
+        <div class="opciones" role="radiogroup">
+          <label><input type="radio" name="fuente" value="presion"> Red o presión conocida</label>
+          <label><input type="radio" name="fuente" value="bomba"> Bomba Czerweny</label>
+        </div>
+        <div id="fuente-presion" class="campos">
+          <label>Presión disponible <span class="unidad">bar</span>
+            <input id="presion" type="number" inputmode="decimal" step="0.1" min="0"></label>
+          <p class="ayuda">La que marca el manómetro con el agua corriendo.</p>
+        </div>
+        <div id="fuente-bomba" class="campos">
+          <label>Línea <select id="bomba-linea"></select></label>
+          <p class="ayuda" id="bomba-uso"></p>
+          <label>Modelo <select id="bomba-modelo"></select></label>
+          <label>Altura de aspiración <span class="unidad">m</span>
+            <input id="aspiracion" type="number" inputmode="decimal" step="0.5" min="0"></label>
+          <p class="ayuda">Cuántos metros sube el agua desde el pozo o la cisterna hasta la bomba (0 si está a nivel o por debajo).</p>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Sectores</h2>
+        <p class="ayuda arriba">Cada sector es una válvula con sus aspersores. Riegan de a uno. Tocá un sector para cargarlo.</p>
+        <ul id="lista-sectores" class="sectores"></ul>
+        <button id="agregar-sector" class="boton" type="button">+ Agregar sector</button>
+      </section>
+
+      <section class="tarjeta" aria-live="polite">
+        <h2>Resumen del diseño</h2>
+        <div id="resumen-obra"></div>
+        <details class="ajustes">
+          <summary>Ajustes</summary>
+          <label>Pérdida por codos, tes y accesorios <span class="unidad">% de la fricción</span>
+            <input id="accesorios" type="number" inputmode="decimal" step="1" min="0"></label>
+        </details>
+      </section>
+    </div>
+
+    <!-- Presupuesto -->
+    <div id="panel-presupuesto" class="panel">
+      <div id="presupuesto-cerrado" class="cerrado" hidden></div>
+      <section class="tarjeta">
+        <h2 id="presupuesto-titulo">Presupuesto</h2>
+        <div class="campos dos">
+          <label>Fecha <input id="pre-fecha" type="date"></label>
+          <label>Validez <span class="unidad">días</span><input id="pre-validez" type="number" inputmode="numeric" min="1" step="1"></label>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Detalle</h2>
+        <p class="ayuda arriba">Las cantidades salen del diseño. Podés cambiarlas, cambiar la descripción o quitar el renglón. El precio que pongas se guarda en tu lista para las próximas obras.</p>
+        <div id="renglones"></div>
+        <button id="agregar-renglon" class="boton" type="button">+ Agregar renglón propio</button>
+        <div id="quitados"></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Total</h2>
+        <div class="campos dos">
+          <label>Descuento <span class="unidad">%</span><input id="pre-descuento" type="number" inputmode="decimal" min="0" max="100" step="1"></label>
+          <label>Desperdicio de caño <span class="unidad">%</span><input id="pre-desperdicio" type="number" inputmode="decimal" min="0" step="1"></label>
+        </div>
+        <label class="tilde"><input id="pre-iva" type="checkbox"> Sumar IVA 21 %</label>
+        <div id="totales"></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Condiciones</h2>
+        <div class="campos">
+          <label>Forma de pago <textarea id="pre-pago" rows="2"></textarea></label>
+          <label>Notas para el cliente <textarea id="pre-notas" rows="3"></textarea></label>
+        </div>
+      </section>
+
+      <div class="botonera">
+        <button id="ver-pdf" class="principal" type="button">Ver PDF</button>
+        <button id="enviar-pdf" class="principal lleno" type="button">Enviar al cliente</button>
+      </div>
+      <p class="ayuda centro" id="aviso-envio">"Enviar al cliente" arma el PDF, abre WhatsApp o el correo del iPhone y deja el presupuesto como Enviado.</p>
+    </div>
+  </div>
+
+  <!-- ===================== Sector ===================== -->
+  <div id="vista-sector" class="vista" hidden>
+    <a id="volver-obra" class="volver">‹ Volver a la obra</a>
 
     <section class="tarjeta">
       <label>Nombre del sector
-        <input id="sector-nombre" type="text" placeholder="Por ejemplo: Frente" autocomplete="off"></label>
+        <input id="sector-nombre" type="text" placeholder="Frente" autocomplete="off"></label>
+      <label class="separado">Superficie a regar <span class="unidad">m²</span>
+        <input id="sector-superficie" type="number" inputmode="decimal" min="0" step="1"></label>
+      <p class="ayuda" id="superficie-ayuda"></p>
       <div class="acciones">
         <button id="copiar-sector" class="chico" type="button">Copiar sector</button>
-        <button id="borrar-sector" class="chico" type="button">Borrar sector</button>
+        <button id="borrar-sector" class="chico peligro" type="button">Borrar sector</button>
       </div>
     </section>
 
@@ -114,7 +207,56 @@
       <div id="resultado"></div>
     </section>
 
-    <button id="volver-abajo" class="volver" type="button">‹ Volver a la obra</button>
+    <a id="volver-obra-abajo" class="volver">‹ Volver a la obra</a>
+  </div>
+
+  <!-- ===================== Lista de precios ===================== -->
+  <div id="vista-precios" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <section class="tarjeta">
+      <h2>Lista de precios</h2>
+      <p class="ayuda arriba">Precio por unidad, en pesos. Se usa en todas las obras nuevas y en las que no están cerradas. Aparecen los materiales que usaste en tus obras.</p>
+      <div id="lista-precios"></div>
+    </section>
+  </div>
+
+  <!-- ===================== Mis datos ===================== -->
+  <div id="vista-datos" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <section class="tarjeta">
+      <h2>Mis datos</h2>
+      <p class="ayuda arriba">Salen arriba en el PDF de cada presupuesto, junto a tu logo.</p>
+      <div class="campos">
+        <label>Nombre comercial <input data-instalador="comercial" type="text" autocomplete="off"></label>
+        <label>Tu nombre <input data-instalador="nombre" type="text" autocomplete="off" placeholder="Darío Manrique"></label>
+        <div class="campos dos">
+          <label>Teléfono <input data-instalador="telefono" type="tel" autocomplete="off"></label>
+          <label>Correo <input data-instalador="correo" type="email" autocomplete="off"></label>
+        </div>
+        <label>Dirección o zona de trabajo <input data-instalador="direccion" type="text" autocomplete="off"></label>
+        <label>CUIT <span class="unidad">opcional</span><input data-instalador="cuit" type="text" inputmode="numeric" autocomplete="off"></label>
+        <label>Texto al pie del presupuesto <span class="unidad">opcional</span><textarea data-instalador="pie" rows="2" placeholder="Garantía de 12 meses en la instalación."></textarea></label>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== Copia de seguridad ===================== -->
+  <div id="vista-copia" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <section class="tarjeta">
+      <h2>Copia de seguridad</h2>
+      <p>Todo lo que cargás queda guardado solo en este teléfono. Si se rompe, lo cambiás o se borran los datos de Safari, se pierde.</p>
+      <p>Guardá una copia de vez en cuando, por ejemplo en Archivos de iCloud o mandátela por correo.</p>
+      <button id="exportar" class="principal lleno ancho" type="button">Guardar copia de todo</button>
+      <p class="ayuda" id="copia-info"></p>
+    </section>
+    <section class="tarjeta">
+      <h2>Recuperar una copia</h2>
+      <p class="ayuda arriba">Reemplaza todo lo que hay ahora en el teléfono por lo de la copia.</p>
+      <label class="principal ancho archivo">Elegir archivo de copia
+        <input id="importar" type="file" accept="application/json,.json"></label>
+      <p id="importar-resultado" class="ayuda"></p>
+    </section>
   </div>
 </main>
 
@@ -146,6 +288,11 @@
 <script src="datos/hunter-2026.js"></script>
 <script src="datos/czerweny.js"></script>
 <script src="app/calculo.js"></script>
+<script src="app/presupuesto.js"></script>
+<script src="app/almacen.js"></script>
+<script src="app/vendor/jspdf-2.5.1.umd.min.js"></script>
+<script src="app/vendor/jspdf-autotable-3.8.2.min.js"></script>
+<script src="app/pdf.js"></script>
 <script src="app/pantalla.js"></script>
 <script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo offline: la app igual funciona */ });
