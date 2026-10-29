@@ -81,7 +81,7 @@
           });
     };
     conSectores(H.proFijas, 'difusor', 'pro', 'Pro-Spray', 'Boquilla Pro fija');
-    conSectores(H.proAjustables, 'difusor', 'pro', 'Pro-Spray', 'Boquilla Pro ajustable');
+    conSectores(H.proAjustables, 'difusor', 'pro', 'Pro-Spray', TIPO_AJUSTABLE);
     conSectores(H.mpRotator, 'mp', 'mp', 'Pro-Spray', 'MP Rotator');
     for (const b of H.mpRotator.franjas.boquillas)
       agregar({
@@ -104,7 +104,33 @@
     if (!cacheEmisores) cacheEmisores = armarEmisores(global.HUNTER);
     return cacheEmisores;
   }
+
+  // Boquillas de arco ajustable: admiten cualquier arco de 1° a 360°.
+  // El id es "pro-8A-HE@120". Para un arco que no está en la tabla, caudal y alcance se interpolan
+  // entre los dos arcos más cercanos del catálogo; debajo del arco más chico, el caudal es proporcional al arco.
+  const TIPO_AJUSTABLE = 'Boquilla Pro ajustable';
+  function emisorAjustable(boquilla, arco) {
+    const base = emisores().filter(e => e.tipo === TIPO_AJUSTABLE && e.boquilla === boquilla).sort((a, b) => a.arco - b.arco);
+    if (!base.length) throw new Error('Boquilla ajustable desconocida: ' + boquilla);
+    if (!(arco >= 1 && arco <= 360)) throw new Error(`El arco de la ${boquilla} tiene que estar entre 1° y 360°`);
+    const exacta = base.find(e => e.arco === arco);
+    const porPresion = (campo, i) => {
+      if (exacta) return exacta[campo][i];
+      if (arco < base[0].arco) return campo === 'caudales' ? base[0][campo][i] * arco / base[0].arco : base[0][campo][i];
+      return interpolar(base.map(e => e.arco), base.map(e => e[campo][i]), arco).valor;
+    };
+    const ref = base[0];
+    return {
+      ...ref, id: `pro-${boquilla}@${arco}`, arco, nombre: `${boquilla} ${arco}°`,
+      arcoDeTabla: !!exacta,
+      radios: ref.presiones.map((_, i) => porPresion('radios', i)),
+      caudales: ref.presiones.map((_, i) => porPresion('caudales', i)),
+    };
+  }
+
   function emisor(id) {
+    const ajustable = /^pro-(.+)@(\d+(?:\.\d+)?)$/.exec(id);
+    if (ajustable) return emisorAjustable(ajustable[1], Number(ajustable[2]));
     const e = emisores().find(x => x.id === id);
     if (!e) throw new Error('Aspersor desconocido: ' + id);
     return e;
@@ -222,6 +248,8 @@
         `${p}: ${l.length > 1 ? 'les' : 'le'} llegan ${rango(l, 'presionBoquilla')} bar, menos que el mínimo de la tabla de ${a.emisor.nombre} (${fmt(a.emisor.presiones[0], 1)} bar). No ${l.length > 1 ? 'van' : 'va'} a rendir lo del catálogo.`);
       if (a.fuera > 0) anotar('alto' + a.emisor.id, 'aviso', a, (l, p) =>
         `${p}: ${l.length > 1 ? 'les' : 'le'} llegan ${rango(l, 'presionBoquilla')} bar, más que el máximo de la tabla de ${a.emisor.nombre} (${fmt(a.emisor.presiones.at(-1), 1)} bar). ${a.emisor.familia === 'turbina' ? 'Conviene bajar la presión.' : 'Conviene un cuerpo con regulador (PRS30 o PRS40).'}`);
+      if (a.emisor.arcoDeTabla === false) anotar('arco' + a.emisor.id, 'info', a, (l, p) =>
+        `${p}: el catálogo no trae la ${a.emisor.boquilla} a ${a.emisor.arco}°; el caudal se calculó en proporción al arco, entre los arcos de la tabla.`);
       if (a.regulador && a.presionEntrada < REGULACION[a.regulador]) anotar('reg' + a.regulador, 'aviso', a, (l, p) =>
         `${p}: entran ${rango(l, 'presionEntrada')} bar, menos que los ${fmt(REGULACION[a.regulador], 1)} bar del regulador ${a.regulador}: no llega a regular.`);
     }
@@ -275,7 +303,7 @@
   }
 
   global.RIEGO = {
-    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, REGULACION,
+    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, REGULACION, TIPO_AJUSTABLE,
     interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

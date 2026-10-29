@@ -50,8 +50,24 @@ test('catálogo de aspersores armado desde los datos de Hunter', () => {
   assert.equal(e.caudales[2], 4.87);               // l/min del catálogo (mayor que 0,29 m³/h = 4,83)
   cerca(R.emisor('pro-17-180').caudales[4], 10.667, 0.1, 'boquilla 17 a 3 bar usa m³/h (0,64) y no 10,06 l/min');
   assert.ok(R.emisor('pgp-3.0') && R.emisor('mp-MP2000-360') && R.emisor('pgp-MPR-30-90') && R.emisor('mp-MP-SS-530'));
-  // Pro fijas 21 + ajustables 14 + MP 18 + franjas 3 + PGP 22 + MPR 12
-  assert.equal(R.emisores().length, 90);
+  // Pro fijas 21 + ajustables (4A y 6A: 14; 8A a 17A-HE: 20) + MP 18 + franjas 3 + PGP 22 + MPR 12
+  assert.equal(R.emisores().length, 110);
+  const ajustables = [...new Set(R.emisores().filter(e => e.tipo === R.TIPO_AJUSTABLE).map(e => e.boquilla))];
+  assert.deepEqual(ajustables, ['4A', '6A', '8A-HE', '10A-HE', '12A-HE', '15A-HE', '17A-HE']);
+});
+
+test('boquillas ajustables: cualquier arco, interpolado entre los arcos de la tabla', () => {
+  const t = arco => R.emisor(`pro-15A-HE@${arco}`).caudales[2];     // a 2,1 bar
+  assert.equal(t(180), 7.08);                                         // pág. 75, valor de tabla
+  assert.equal(R.emisor('pro-15A-HE@180').arcoDeTabla, true);
+  // a 270° usa 0,64 m³/h = 10,667 l/min (mayor que los 10,62 l/min impresos)
+  cerca(t(225), (7.08 + 0.64 * 1000 / 60) / 2, 0.01, '225° queda en la mitad entre 180° y 270°');
+  assert.equal(R.emisor('pro-15A-HE@225').arcoDeTabla, false);
+  cerca(t(30), t(90) * 30 / 90, 0.01, 'debajo de 90° es proporcional al arco');
+  cerca(R.emisor('pro-17A-HE@90').radios[4], 5.4, 0.01, 'alcance 5,4 m (el catálogo imprime 54)');
+  assert.throws(() => R.emisor('pro-15A-HE@400'));
+  const r = R.calcularSector(simple('pro-15A-HE@225', 2.1));
+  assert.ok(r.avisos.some(a => a.nivel === 'info' && a.texto.includes('proporción al arco')));
 });
 
 test('un aspersor sin pérdidas recibe la presión de la fuente y da el caudal de la tabla', () => {

@@ -66,17 +66,16 @@ main { max-width: 720px; margin: 0 auto; padding: 12px 16px calc(32px + env(safe
 .tarjeta h2 { margin: 0 0 10px; font-size: 1.05rem; color: var(--verde); }
 
 .campos { display: grid; gap: 10px; }
-.campos.dos { grid-template-columns: 1fr 1fr; }
+/* minmax(0, 1fr): las columnas no se agrandan por textos largos de los menús (eso sacaba la pantalla de cuadro). */
+.campos.dos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .campos .ancho { grid-column: 1 / -1; }
-/* Rótulo y unidad en la misma línea, el campo debajo ocupando todo el ancho. */
-label {
-  display: grid; grid-template-columns: max-content 1fr; align-items: baseline;
-  column-gap: 4px; row-gap: 4px; font-size: .85rem; color: var(--suave); min-width: 0;
-}
-label > input, label > select { grid-column: 1 / -1; }
+/* Rótulo (con su unidad al lado) arriba y el campo debajo, ocupando todo el ancho. */
+label { display: block; font-size: .85rem; color: var(--suave); min-width: 0; }
+label > input, label > select { display: block; margin-top: 4px; }
 .unidad { font-size: .75rem; opacity: .8; }
-input[type=number], select {
-  width: 100%;
+input[type=number], input[type=text], select {
+  width: 100%; max-width: 100%;
+  text-overflow: ellipsis;
   font: inherit;
   font-size: 16px;            /* evita que el iPhone haga zoom al tocar */
   color: var(--tinta);
@@ -100,9 +99,37 @@ input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px
 .tilde { margin-top: 12px; min-height: 44px; }
 input[type=radio], input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--verde); margin: 0; }
 .ayuda { margin: 4px 0 0; font-size: .8rem; color: var(--suave); }
+.ayuda.arriba { margin: -4px 0 10px; }
 
-.aspersores { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
-.aspersor { border: 1px solid var(--linea); border-radius: 12px; padding: 10px 12px 12px; }
+/* Lista de sectores de la obra */
+.sectores { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.sector-tarjeta {
+  width: 100%; text-align: left; display: grid; gap: 3px;
+  background: var(--campo); color: var(--tinta);
+  border: 1px solid var(--linea); border-radius: 12px; padding: 10px 12px; min-height: 64px;
+}
+.sector-tarjeta:active { background: var(--verde-claro); }
+.sector-nombre { font-weight: 600; font-size: 1rem; }
+.sector-nombre::after { content: ' ›'; color: var(--suave); }
+.sector-datos { font-size: .82rem; color: var(--suave); }
+.estado { justify-self: start; font-size: .75rem; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-top: 2px; }
+.estado.bien  { background: var(--verde-claro); color: var(--verde); }
+.estado.info  { background: var(--info-fondo); color: var(--info); }
+.estado.aviso { background: var(--aviso-fondo); color: var(--aviso); }
+.estado.error { background: var(--error-fondo); color: var(--error); }
+.resumen-texto { font-size: .9rem; margin: 0 0 10px; }
+
+/* Vista de un sector */
+.volver {
+  border: 0; background: transparent; color: var(--verde); font-weight: 600;
+  font-size: 1rem; padding: 8px 0; min-height: 44px; margin-bottom: 4px;
+}
+.acciones { display: flex; gap: 8px; margin-top: 10px; }
+.chico:disabled { opacity: .4; }
+
+/* minmax(0, 1fr): sin esto, el nombre largo del aspersor (que no se corta de línea) ensanchaba la tarjeta fuera de la pantalla. */
+.aspersores { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.aspersor { border: 1px solid var(--linea); border-radius: 12px; padding: 10px 12px 12px; min-width: 0; }
 .aspersor-cabeza { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .numero {
   flex: none; width: 28px; height: 28px; border-radius: 50%;
@@ -145,6 +172,7 @@ table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-
 th, td { padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--linea); white-space: nowrap; }
 th { color: var(--suave); font-weight: 600; font-size: .75rem; }
 th:first-child, td:first-child { text-align: left; }
+td.nombre { white-space: normal; min-width: 7.5em; }
 td.mal { color: var(--error); font-weight: 600; }
 tr.elegido td { background: var(--verde-claro); font-weight: 600; }
 h3 { font-size: .9rem; margin: 14px 0 6px; color: var(--suave); }
