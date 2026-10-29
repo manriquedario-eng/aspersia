@@ -63,6 +63,7 @@
   function pintar() {
     cuadro = 0;
     const svg = ctx.svg, t = plano();
+    if (!svg.clientWidth) return;     // plano oculto (por ejemplo, con la vista 3D abierta): se dibuja al volver
     svg.innerHTML = '';
     if (!vista) ajustar();
     svg.setAttribute('viewBox', `${vista.x} ${vista.y} ${vista.w} ${vista.h}`);
@@ -289,5 +290,6 @@
       ctx.obra.sectores.map((s, k) => `<button type="button" data-filtro="${k}" class="${soloSector === k ? 'activo' : ''}"><i style="background:${colorSector(k)}"></i>${(s.nombre || `Sector ${k + 1}`).replace(/[<>&]/g, '')}</button>`).join('');
   }
 
-  global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores()) : null };
+  global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, soloSector: () => soloSector,
+    coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores()) : null };
 })(typeof window !== 'undefined' ? window : globalThis);

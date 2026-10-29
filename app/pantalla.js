@@ -98,6 +98,7 @@
 
   function rutear() {
     A.guardar(datos);
+    PLANO3D.cerrar();       // la vista 3D usa la placa de video: se libera al salir del plano
     const partes = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     const [seccion, id, sub, n] = partes;
     if (seccion === 'obra') {
@@ -180,11 +181,49 @@
         const radio = c.r ? c.r.aspersores[i].radio : e.radios[Math.floor(e.radios.length / 2)];
         const franja = e.tipo === 'MP Rotator de franja' ? (/LCS/.test(e.boquilla) ? 'LCS' : /RCS/.test(e.boquilla) ? 'RCS' : 'SS') : null;
         const arco = e.arco ?? a.arco ?? 360;
-        lista.push({ s: k, i, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre });
+        lista.push({ s: k, i, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre, trayectoria: trayectoria(e) });
       });
     });
     return lista;
   }
+
+  // Ángulo de salida del chorro, para la vista 3D. Pro fijas y ajustables: el del catálogo (págs. 74 a 78).
+  // PGP Ultra: 25° la estándar y 13° la de ángulo bajo (pág. 22). MP Rotator no lo publica: se usan unos 15°.
+  function trayectoria(e) {
+    const H = window.HUNTER;
+    if (e.tipo === 'Boquilla Pro fija' || e.tipo === R.TIPO_AJUSTABLE) {
+      const b = [...H.proFijas.boquillas, ...H.proAjustables.boquillas].find(x => x.modelo === e.boquilla);
+      return b ? b.trayectoria : 15;
+    }
+    if (e.tipo.startsWith('Turbina PGP Ultra')) return /ángulo bajo/i.test(e.nombre) ? 13 : 25;
+    if (e.tipo === 'MP Rotator de franja') return 8;
+    return 15;
+  }
+
+  // ---------- Vista 3D ----------
+  let modoPlano = '2d';
+  function cambiarModoPlano(modo) {
+    modoPlano = modo;
+    document.querySelectorAll('[data-modo]').forEach(b => b.setAttribute('aria-selected', b.dataset.modo === modo));
+    $('plano-2d-caja').hidden = modo !== '2d';
+    $('plano-3d-caja').hidden = modo !== '3d';
+    $('plano-seleccion').hidden = modo !== '2d';
+    if (modo === '3d') abrir3D(); else { PLANO3D.cerrar(); PLANO.iniciar(planoActual()); }
+  }
+  function abrir3D() {
+    const solo = PLANO.soloSector();
+    const asps = aspersoresDelPlano().filter(a => solo == null || a.s === solo);
+    PLANO3D.abrir($('plano-3d'), {
+      terreno: obra.plano, aspersores: asps, fuente: obra.plano.fuente,
+      sectores: obra.sectores.map((s, k) => ({ ...s, visible: solo == null || k === solo })),
+      colorSector: PLANO.colorSector, conCobertura: obra.plano.verCobertura,
+    }).catch(err => { $('plano-3d').innerHTML = `<p class="ayuda">${escapar(err.message)}</p>`; });
+  }
+  document.querySelectorAll('[data-modo]').forEach(b => b.addEventListener('click', () => cambiarModoPlano(b.dataset.modo)));
+  $('encuadrar-3d').addEventListener('click', () => PLANO3D.encuadrar());
+  $('agua-3d').addEventListener('click', ev => { const corre = PLANO3D.alternarAgua(); ev.currentTarget.style.opacity = corre ? 1 : 0.45; });
+  // Al elegir otro sector en el filtro o cambiar la cobertura, el 3D se rearma con lo que se ve.
+  $('plano-filtro').addEventListener('click', () => { if (modoPlano === '3d') setTimeout(abrir3D, 0); });
 
   // Con "calcular los caños con las distancias del plano", las distancias y el largo hasta cada válvula salen de las posiciones.
   function sincronizarDistancias() {
@@ -205,12 +244,8 @@
     $('plano-distancias').checked = usaPlano();
     $('plano-cobertura').checked = obra.plano.verCobertura;
     guardar();
-    PLANO.iniciar({
-      obra, svg: $('plano-svg'), botones: $('plano-botones'), seleccion: $('plano-seleccion'),
-      estadisticas: $('plano-estadisticas'), filtro: $('plano-filtro'),
-      aspersores: aspersoresDelPlano,
-      alCambiar: () => { sincronizarDistancias(); guardar(); },
-    });
+    PLANO.iniciar(planoActual());
+    cambiarModoPlano(modoPlano);
   }
   const medidaTerreno = (campo, v) => {
     obra.plano[campo] = Math.max(1, Math.min(500, decimal(v)));
@@ -228,7 +263,10 @@
   $('plano-ancho').addEventListener('change', ev => medidaTerreno('ancho', ev.target.value));
   $('plano-largo').addEventListener('change', ev => medidaTerreno('largo', ev.target.value));
   $('plano-distancias').addEventListener('change', ev => { obra.plano.distanciasDesdePlano = ev.target.checked; sincronizarDistancias(); guardar(); PLANO.pintar(); });
-  $('plano-cobertura').addEventListener('change', ev => { obra.plano.verCobertura = ev.target.checked; guardar(); PLANO.pintar(); });
+  $('plano-cobertura').addEventListener('change', ev => {
+    obra.plano.verCobertura = ev.target.checked; guardar();
+    if (modoPlano === '3d') abrir3D(); else PLANO.pintar();
+  });
 
   // =====================================================================
   // Consultar a Claude: resumen técnico para pegar en la app de Claude

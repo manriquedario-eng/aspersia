@@ -139,8 +139,20 @@
       </section>
 
       <section class="tarjeta plano-tarjeta">
+        <div class="modo-plano" role="tablist">
+          <button type="button" data-modo="2d" aria-selected="true">Plano 2D</button>
+          <button type="button" data-modo="3d" aria-selected="false">Vista 3D</button>
+        </div>
         <div id="plano-filtro" class="filtro"></div>
-        <div class="plano-caja">
+        <div id="plano-3d-caja" class="plano-caja" hidden>
+          <div id="plano-3d" class="plano plano-3d"></div>
+          <div class="plano-botones">
+            <button type="button" id="encuadrar-3d" aria-label="Volver a encuadrar">⤢</button>
+            <button type="button" id="agua-3d" aria-label="Pausar o soltar el agua">💧</button>
+          </div>
+          <p class="ayuda">Un dedo gira la vista; dos dedos acercan y la mueven. Lo que cambies en el plano 2D se ve acá al volver.</p>
+        </div>
+        <div id="plano-2d-caja" class="plano-caja">
           <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
           <div id="plano-botones" class="plano-botones">
             <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
@@ -330,6 +342,7 @@
 <script src="app/almacen.js"></script>
 <script src="app/geometria.js"></script>
 <script src="app/plano.js"></script>
+<script src="app/plano3d.js"></script>
 <script src="app/vendor/jspdf-2.5.1.umd.min.js"></script>
 <script src="app/vendor/jspdf-autotable-3.8.2.min.js"></script>
 <script src="app/pdf.js"></script>

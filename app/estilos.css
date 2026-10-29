@@ -218,6 +218,11 @@ table.totales td:last-child { text-align: right; }
 .sel-titulo { margin: 0 0 10px; font-weight: 600; color: var(--primario); font-size: .92rem; }
 .giros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
 .pestanas { grid-template-columns: repeat(4, 1fr); }
+.modo-plano { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--fondo); border-radius: 10px; padding: 3px; margin-bottom: 8px; }
+.modo-plano button { border: 0; border-radius: 8px; background: transparent; color: var(--suave); font-weight: 600; min-height: 38px; }
+.modo-plano button[aria-selected=true] { background: var(--papel); color: var(--primario); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.plano-3d { overflow: hidden; touch-action: none; }
+.plano-3d canvas { display: block; }
 .pestanas a { font-size: .85rem; }
 
 .opciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
