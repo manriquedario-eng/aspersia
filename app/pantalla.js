@@ -20,7 +20,9 @@
     clearTimeout(pendiente);
     pendiente = setTimeout(() => A.guardar(datos), 150);
   };
+  // En el iPhone la app puede cerrarse sin aviso al pasar a otra: se guarda también cuando deja de verse.
   window.addEventListener('pagehide', () => A.guardar(datos));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') A.guardar(datos); });
 
   // ---------- Utilidades ----------
   const opciones = (sel, items, valor) => {
@@ -52,13 +54,9 @@
   const deTipo = tipo => EMISORES.filter(e => e.tipo === tipo);
   const boquillas = tipo => [...new Set(deTipo(tipo).map(e => e.boquilla))];
   const arcos = (tipo, boq) => deTipo(tipo).filter(e => e.boquilla === boq && e.arco != null).map(e => e.arco);
-  const esAjustable = a => a.tipo === R.TIPO_AJUSTABLE;
-  const arcoLibre = a => esAjustable(a) || a.tipo === 'Turbina PGP Ultra';   // en la PGP el arco solo cuenta para la superficie
-  function idEmisor(a) {
-    if (esAjustable(a)) return `pro-${a.boquilla}@${a.arco}`;
-    const e = EMISORES.find(e => e.tipo === a.tipo && e.boquilla === a.boquilla && (e.arco == null || e.arco === Number(a.arco)));
-    return e && e.id;
-  }
+  // Qué aspersor es cada uno, qué entra al cálculo y las distancias del plano se deciden en app/obra.js.
+  const O = window.OBRA;
+  const { esAjustable, esMP, arcoLibre, idEmisor } = O;
   function etiquetaBoquilla(tipo, boq) {
     const e = deTipo(tipo).find(x => x.boquilla === boq);
     const r = e.radios[Math.floor(e.radios.length / 2)];
@@ -67,21 +65,9 @@
   }
 
   // ---------- Cálculo ----------
-  const sectorParaCalcular = o => s => ({
-    fuente: o.fuente.tipo === 'bomba'
-      ? { tipo: 'bomba', linea: o.fuente.linea, modelo: o.fuente.modelo, aspiracion: o.fuente.aspiracion }
-      : { tipo: 'presion', bar: o.fuente.bar },
-    alimentacion: s.alimentacion, valvula: s.valvula, lateral: s.lateral,
-    aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura })),
-    accesorios: o.accesorios,
-  });
-  function calcular(s) {
-    try {
-      const d = sectorParaCalcular(obra)(s);
-      return { r: R.calcularSector(d), rec: R.recomendarDiametro(d) };
-    } catch (err) { return { error: err.message }; }
-  }
-  const presupuestoDe = o => P.armarPresupuesto(o, datos.precios, sectorParaCalcular(o));
+  const sectorParaCalcular = O.paraCalcular;
+  const calcular = s => O.calcular(obra, s);
+  const presupuestoDe = o => O.presupuesto(o, datos.precios);
   const peorNivel = c => c.error ? 'error' : ['error', 'aviso', 'info'].find(n => c.r.avisos.some(a => a.nivel === n)) || 'bien';
   const ESTADO_SECTOR = { error: 'Hay problemas', aviso: 'Revisar avisos', info: 'Bien, con notas', bien: 'Todo bien' };
   const CLASE_ESTADO = { Borrador: 'info', Enviado: 'aviso', Aceptado: 'bien', Terminado: 'bien', Rechazado: 'error' };
@@ -170,35 +156,8 @@
   const GEO = window.GEOMETRIA;
   const r1 = v => Math.round(v * 10) / 10;
   const usaPlano = () => obra.plano && obra.plano.distanciasDesdePlano;
-
-  // Aspersores con lo que hace falta para dibujarlos: posición, giro, alcance real (con la presión que les llega) y arco.
-  function aspersoresDelPlano() {
-    const lista = [];
-    obra.sectores.forEach((s, k) => {
-      const c = calcular(s);
-      s.aspersores.forEach((a, i) => {
-        const e = R.emisor(idEmisor(a));
-        const radio = c.r ? c.r.aspersores[i].radio : e.radios[Math.floor(e.radios.length / 2)];
-        const franja = e.tipo === 'MP Rotator de franja' ? (/LCS/.test(e.boquilla) ? 'LCS' : /RCS/.test(e.boquilla) ? 'RCS' : 'SS') : null;
-        const arco = e.arco ?? a.arco ?? 360;
-        lista.push({ s: k, i, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre, trayectoria: trayectoria(e) });
-      });
-    });
-    return lista;
-  }
-
-  // Ángulo de salida del chorro, para la vista 3D. Pro fijas y ajustables: el del catálogo (págs. 74 a 78).
-  // PGP Ultra: 25° la estándar y 13° la de ángulo bajo (pág. 22). MP Rotator no lo publica: se usan unos 15°.
-  function trayectoria(e) {
-    const H = window.HUNTER;
-    if (e.tipo === 'Boquilla Pro fija' || e.tipo === R.TIPO_AJUSTABLE) {
-      const b = [...H.proFijas.boquillas, ...H.proAjustables.boquillas].find(x => x.modelo === e.boquilla);
-      return b ? b.trayectoria : 15;
-    }
-    if (e.tipo.startsWith('Turbina PGP Ultra')) return /ángulo bajo/i.test(e.nombre) ? 13 : 25;
-    if (e.tipo === 'MP Rotator de franja') return 8;
-    return 15;
-  }
+  const aspersoresDelPlano = () => O.aspersoresDelPlano(obra);
+  const sincronizarDistancias = () => O.sincronizarDistancias(obra);
 
   // ---------- Vista 3D ----------
   let modoPlano = '2d';
@@ -224,17 +183,6 @@
   $('agua-3d').addEventListener('click', ev => { const corre = PLANO3D.alternarAgua(); ev.currentTarget.style.opacity = corre ? 1 : 0.45; });
   // Al elegir otro sector en el filtro o cambiar la cobertura, el 3D se rearma con lo que se ve.
   $('plano-filtro').addEventListener('click', () => { if (modoPlano === '3d') setTimeout(abrir3D, 0); });
-
-  // Con "calcular los caños con las distancias del plano", las distancias y el largo hasta cada válvula salen de las posiciones.
-  function sincronizarDistancias() {
-    if (!usaPlano()) return;
-    GEO.ubicarSinPosicion(obra.plano, obra.sectores);
-    const f = obra.plano.fuente;
-    for (const s of obra.sectores) {
-      GEO.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => s.aspersores[i].distancia = d);
-      s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
-    }
-  }
 
   function abrirPlano() {
     GEO.ubicarSinPosicion(obra.plano, obra.sectores);
@@ -372,6 +320,7 @@
       L.modelos.map(m => [m.modelo, `${m.modelo} · ${fmt(m.hp, m.hp % 1 ? 2 : 0)} HP · ${m.tension}`]), obra.fuente.modelo);
   }
   function pintarDiseno() {
+    sincronizarDistancias();
     guardar();
     const calculos = obra.sectores.map(calcular);
     $('lista-sectores').innerHTML = obra.sectores.map((s, i) => {
@@ -458,7 +407,11 @@
   $('copiar-sector').addEventListener('click', () => {
     const copia = JSON.parse(JSON.stringify(sector()));
     copia.nombre = `${sector().nombre} (copia)`;
+    // En el plano la copia no va encima del original: queda sin ubicar y se acomoda en una fila propia.
+    delete copia.valvulaPos;
+    for (const a of copia.aspersores) { delete a.x; delete a.y; }
     obra.sectores.splice(nSector + 1, 0, copia);
+    if (obra.plano) window.GEOMETRIA.ubicarSinPosicion(obra.plano, obra.sectores);
     guardar();
     ir(`#/obra/${obra.id}/sector/${nSector + 2}`);
   });
@@ -500,12 +453,16 @@
     li.querySelector('[data-solo=arco]').hidden = !listaArcos.length;
     li.querySelector('[data-solo=arco-libre]').hidden = !libre;
     if (libre) {
-      a.arco = Math.min(360, Math.max(1, Math.round(Number(a.arco) || (esAjustable(a) ? 180 : 360))));
+      a.arco = Math.min(360, Math.max(1, Math.round(Number(a.arco) || (esAjustable(a) || esMP(a) ? 180 : 360))));
       campo('arcoLibre').value = a.arco;
+      campo('arcoLibre').min = esMP(a) ? 90 : 1;
     } else {
       a.arco = listaArcos.length ? Number(opciones(campo('arco'), listaArcos.map(x => [x, `${x}°`]), a.arco)) : null;
     }
-    const e = R.emisor(idEmisor(a));
+    // Con un arco que la boquilla no admite (por ejemplo una MP a 300°) no hay aspersor para calcular:
+    // se sigue mostrando la tarjeta y el error aparece en el resultado del sector.
+    let e, arcoInvalido = false;
+    try { e = R.emisor(idEmisor(a)); } catch { e = deTipo(a.tipo).find(x => x.boquilla === a.boquilla); arcoInvalido = true; }
     const conCuerpo = e.cuerpo === 'Pro-Spray';
     li.querySelector('[data-solo=regulador]').hidden = !conCuerpo;
     if (!conCuerpo) a.regulador = '';
@@ -515,7 +472,8 @@
     campo('altura').value = a.altura;
     li.querySelector('.numero').textContent = i + 1;
     li.querySelector('[data-texto=distancia]').textContent = (i ? 'Distancia al anterior' : 'Distancia a la válvula') + (usaPlano() ? ' (del plano)' : '');
-    li.querySelector('.resumen').textContent = `${e.tipo} ${e.nombre}${a.tipo === 'Turbina PGP Ultra' ? ` a ${a.arco}°` : ''}`;
+    li.querySelector('.resumen').textContent = arcoInvalido ? `${a.tipo} ${a.boquilla}: arco de ${a.arco}° no válido`
+      : `${e.tipo} ${e.nombre}${a.tipo === 'Turbina PGP Ultra' ? ` a ${a.arco}°` : ''}`;
   }
   lista.addEventListener('input', ev => {
     const li = ev.target.closest('.aspersor');
@@ -560,6 +518,7 @@
   });
 
   function pintarSector() {
+    sincronizarDistancias();
     guardar();
     const caja = $('resultado');
     const c = calcular(sector());
@@ -668,7 +627,7 @@
 
   function pintarTotales(pre) {
     const filas = P.RUBROS.filter(rb => pre.subtotales[rb]).map(rb => `<tr><td>${rb}</td><td>${P.pesos(pre.subtotales[rb])}</td></tr>`);
-    if (pre.descuento) filas.push(`<tr><td>Descuento ${fmt(obra.presupuesto.descuento, 0)} %</td><td>− ${P.pesos(pre.descuento)}</td></tr>`);
+    if (pre.descuento) filas.push(`<tr><td>Descuento ${fmt(pre.descuentoPct ?? obra.presupuesto.descuento, 0)} %</td><td>− ${P.pesos(pre.descuento)}</td></tr>`);
     if (pre.iva) filas.push(`<tr><td>IVA ${P.IVA} %</td><td>${P.pesos(pre.iva)}</td></tr>`);
     $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${P.pesos(pre.total)}</td></tr></table>
       ${pre.sinPrecio ? `<ul class="avisos"><li class="aviso">${pre.sinPrecio} renglón${pre.sinPrecio === 1 ? '' : 'es'} sin precio: no sale${pre.sinPrecio === 1 ? '' : 'n'} en el PDF hasta que le pongas uno.</li></ul>` : ''}`;
@@ -749,9 +708,15 @@
     const b = ev.currentTarget; b.disabled = true; b.textContent = 'Armando PDF…';
     try {
       const archivo = await hacerPDF();
-      const url = URL.createObjectURL(archivo);
-      const w = window.open(url, '_blank');
-      if (!w) descargar(archivo);
+      // Instalada en la pantalla de inicio del iPhone, abrir una ventana nueva puede no mostrar nada:
+      // ahí se usa la hoja de compartir, que trae la vista previa del PDF (y deja guardarlo en Archivos).
+      const instalada = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+      if (instalada && navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        try { await navigator.share({ files: [archivo], title: archivo.name }); } catch (err) { if (err.name !== 'AbortError') descargar(archivo); }
+      } else {
+        const w = window.open(URL.createObjectURL(archivo), '_blank');
+        if (!w) descargar(archivo);
+      }
     } finally { b.disabled = false; b.textContent = 'Ver PDF'; }
   });
   $('enviar-pdf').addEventListener('click', async ev => {

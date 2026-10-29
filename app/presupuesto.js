@@ -152,10 +152,15 @@
     const neto = subtotal - descuento;
     const iva = p.iva ? redondear(neto * IVA / 100) : 0;
     const quitados = m.renglones.filter(r => (cambios[r.clave] || {}).quitar);
+    // Todo lo que muestra el PDF va acá adentro: al cerrar el presupuesto se guarda tal cual, y el PDF
+    // de un presupuesto enviado no cambia aunque después se toque el diseño.
     return {
-      renglones, quitados, subtotales, subtotal, descuento, neto, iva, total: neto + iva,
+      renglones, quitados, subtotales, subtotal, descuento, descuentoPct: p.descuento || 0, neto, iva, total: neto + iva,
       sinPrecio: renglones.filter(r => !r.precio && r.cantidad).length,
-      datos: { aspersores: m.aspersores, valvulas: m.valvulas, metrosZanja: m.metrosZanja, m2: m.m2, m2Estimados: m.m2Estimados },
+      datos: {
+        aspersores: m.aspersores, valvulas: m.valvulas, metrosZanja: m.metrosZanja, m2: m.m2, m2Estimados: m.m2Estimados,
+        sectores: obra.sectores.map(s => ({ nombre: s.nombre, aspersores: s.aspersores.length })),
+      },
       notas: m.notas,
     };
   }

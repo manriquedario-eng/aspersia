@@ -88,8 +88,10 @@
 
     // --- Resumen técnico ---
     const d = pre.datos;
-    const sectores = obra.sectores.map(s => `${s.nombre} (${s.aspersores.length})`).join(', ');
-    const resumen = `Sistema de riego automático por aspersión Hunter: ${obra.sectores.length} sector${obra.sectores.length === 1 ? '' : 'es'} ` +
+    // Se usa lo guardado en el presupuesto (no la obra actual): así un presupuesto cerrado siempre da el mismo PDF.
+    const listaSectores = d.sectores || obra.sectores.map(s => ({ nombre: s.nombre, aspersores: s.aspersores.length }));
+    const sectores = listaSectores.map(s => `${s.nombre} (${s.aspersores})`).join(', ');
+    const resumen = `Sistema de riego automático por aspersión Hunter: ${listaSectores.length} sector${listaSectores.length === 1 ? '' : 'es'} ` +
       `(${sectores}), ${d.aspersores} aspersores` + (d.m2 ? ` y unos ${cantidad(d.m2)} m² de superficie regada.` : '.');
     doc.setFillColor(231, 240, 250); doc.setTextColor(...AZUL_OSCURO); doc.setFontSize(9.5);
     const lineasResumen = doc.splitTextToSize(resumen, ancho - 2 * margen - 8);
@@ -119,7 +121,7 @@
 
     // --- Totales ---
     const totales = [['Subtotal', P.pesos(pre.subtotal)]];
-    if (pre.descuento) totales.push([`Descuento ${cantidad(p.descuento)} %`, '- ' + P.pesos(pre.descuento)]);
+    if (pre.descuento) totales.push([`Descuento ${cantidad(pre.descuentoPct ?? p.descuento)} %`, '- ' + P.pesos(pre.descuento)]);
     if (pre.iva) totales.push([`IVA ${P.IVA} %`, P.pesos(pre.iva)]);
     if (totales.length === 1) totales.length = 0;
     totales.push([{ content: 'TOTAL', styles: { fontStyle: 'bold', fontSize: 12, textColor: 255, fillColor: AZUL } },

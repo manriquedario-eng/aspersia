@@ -108,11 +108,20 @@
   // Boquillas de arco ajustable: admiten cualquier arco de 1° a 360°.
   // El id es "pro-8A-HE@120". Para un arco que no está en la tabla, caudal y alcance se interpolan
   // entre los dos arcos más cercanos del catálogo; debajo del arco más chico, el caudal es proporcional al arco.
+  //
+  // Las MP Rotator también son de arco ajustable, pero cada modelo tiene sus rangos (pág. 53): de 90° a 210°,
+  // de 210° a 270° (otro color de la misma boquilla) o círculo completo; la MP3500 solo de 90° a 210°.
+  // El id es "mp-MP2000@120". Entre 271° y 359° no hay boquilla MP.
   const TIPO_AJUSTABLE = 'Boquilla Pro ajustable';
-  function emisorAjustable(boquilla, arco) {
-    const base = emisores().filter(e => e.tipo === TIPO_AJUSTABLE && e.boquilla === boquilla).sort((a, b) => a.arco - b.arco);
+  const TIPO_MP = 'MP Rotator';
+  function emisorAjustable(boquilla, arco, tipo = TIPO_AJUSTABLE) {
+    const base = emisores().filter(e => e.tipo === tipo && e.boquilla === boquilla).sort((a, b) => a.arco - b.arco);
     if (!base.length) throw new Error('Boquilla ajustable desconocida: ' + boquilla);
-    if (!(arco >= 1 && arco <= 360)) throw new Error(`El arco de la ${boquilla} tiene que estar entre 1° y 360°`);
+    if (tipo === TIPO_MP) {
+      const max = boquilla === 'MP3500' ? 210 : 270;
+      if (!((arco >= 90 && arco <= max) || (arco === 360 && boquilla !== 'MP3500')))
+        throw new Error(boquilla === 'MP3500' ? 'La MP3500 se ajusta de 90° a 210°.' : `La ${boquilla} se ajusta de 90° a 270° o va en círculo completo (360°).`);
+    } else if (!(arco >= 1 && arco <= 360)) throw new Error(`El arco de la ${boquilla} tiene que estar entre 1° y 360°`);
     const exacta = base.find(e => e.arco === arco);
     const porPresion = (campo, i) => {
       if (exacta) return exacta[campo][i];
@@ -121,7 +130,7 @@
     };
     const ref = base[0];
     return {
-      ...ref, id: `pro-${boquilla}@${arco}`, arco, nombre: `${boquilla} ${arco}°`,
+      ...ref, id: `${tipo === TIPO_MP ? 'mp' : 'pro'}-${boquilla}@${arco}`, arco, nombre: `${boquilla} ${arco}°`,
       arcoDeTabla: !!exacta,
       radios: ref.presiones.map((_, i) => porPresion('radios', i)),
       caudales: ref.presiones.map((_, i) => porPresion('caudales', i)),
@@ -131,6 +140,8 @@
   function emisor(id) {
     const ajustable = /^pro-(.+)@(\d+(?:\.\d+)?)$/.exec(id);
     if (ajustable) return emisorAjustable(ajustable[1], Number(ajustable[2]));
+    const mp = /^mp-(MP\d+)@(\d+(?:\.\d+)?)$/.exec(id);
+    if (mp) return emisorAjustable(mp[1], Number(mp[2]), TIPO_MP);
     const e = emisores().find(x => x.id === id);
     if (!e) throw new Error('Aspersor desconocido: ' + id);
     return e;
@@ -267,7 +278,8 @@
 
     return {
       convergio, iteraciones: iter,
-      caudalTotal: r.total,
+      // El total es exactamente la suma de lo que muestra cada aspersor (la iteración deja una diferencia de milésimas).
+      caudalTotal: r.asp.reduce((t, a) => t + a.caudal, 0),
       fuente: { presion: r.pFuente, bomba: pump ? { ...pump, altura: r.alturaBomba.valor } : null },
       alimentacion: alim ? { cano: alim.nombre, largo: alim.largo, perdida: r.perdAlim, velocidad: velocidad(r.total, alim.di) } : null,
       presionValvula: r.pValvula, perdidaValvula: r.perdValv.valor, presionSalidaValvula: r.pSalidaValvula,
@@ -303,7 +315,7 @@
   }
 
   global.RIEGO = {
-    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, REGULACION, TIPO_AJUSTABLE,
+    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
     interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
