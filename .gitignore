@@ -1,0 +1,7 @@
+# Catálogos de los fabricantes: pesan mucho y no son nuestros
+fichas/
+# Notas del proyecto y configuración de Claude: son privadas
+CLAUDE.md
+.claude/
+# Se arma con herramientas/armar-publicacion.mjs; GitHub Pages publica desde la raíz
+publicar/

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6f4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aspersia">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Aspersia · Cálculo de sector</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="app/iconos/icono-180.png">
+<link rel="icon" type="image/png" href="app/iconos/icono-192.png">
+<link rel="stylesheet" href="app/estilos.css">
+</head>
+<body>
+<header class="barra">
+  <h1>Aspersia</h1>
+  <p>Cálculo de sector · Hunter · Czerweny</p>
+</header>
+
+<main>
+  <section class="tarjeta">
+    <h2>De dónde sale el agua</h2>
+    <div class="opciones" role="radiogroup">
+      <label><input type="radio" name="fuente" value="presion"> Red o presión conocida</label>
+      <label><input type="radio" name="fuente" value="bomba"> Bomba Czerweny</label>
+    </div>
+    <div id="fuente-presion" class="campos">
+      <label>Presión disponible <span class="unidad">bar</span>
+        <input id="presion" type="number" inputmode="decimal" step="0.1" min="0"></label>
+      <p class="ayuda">La que marca el manómetro con el agua corriendo.</p>
+    </div>
+    <div id="fuente-bomba" class="campos">
+      <label>Línea <select id="bomba-linea"></select></label>
+      <p class="ayuda" id="bomba-uso"></p>
+      <label>Modelo <select id="bomba-modelo"></select></label>
+      <label>Altura de aspiración <span class="unidad">m</span>
+        <input id="aspiracion" type="number" inputmode="decimal" step="0.5" min="0"></label>
+      <p class="ayuda">Cuántos metros sube el agua desde el pozo o la cisterna hasta la bomba (0 si está a nivel o por debajo).</p>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Caño hasta la válvula</h2>
+    <div class="campos dos">
+      <label>Caño <select id="alim-material" data-material></select></label>
+      <label>Diámetro <select id="alim-nominal"></select></label>
+      <label>Largo <span class="unidad">m</span><input id="alim-largo" type="number" inputmode="decimal" step="1" min="0"></label>
+      <label>Desnivel <span class="unidad">m</span><input id="alim-desnivel" type="number" inputmode="decimal" step="0.5"></label>
+    </div>
+    <p class="ayuda">Desnivel: positivo si la válvula está más alta que la fuente.</p>
+    <label class="tilde"><input id="valvula" type="checkbox"> Electroválvula Hunter PGV de 1"</label>
+  </section>
+
+  <section class="tarjeta">
+    <h2>Sector</h2>
+    <div class="campos dos">
+      <label>Caño del sector <select id="lat-material" data-material></select></label>
+      <label>Diámetro <select id="lat-nominal"></select></label>
+    </div>
+    <ol id="aspersores" class="aspersores"></ol>
+    <button id="agregar" class="boton" type="button">+ Agregar aspersor</button>
+    <details class="ajustes">
+      <summary>Ajustes</summary>
+      <label>Pérdida por codos, tes y accesorios <span class="unidad">% de la fricción</span>
+        <input id="accesorios" type="number" inputmode="decimal" step="1" min="0"></label>
+    </details>
+  </section>
+
+  <section class="tarjeta resultado" aria-live="polite">
+    <h2>Resultado</h2>
+    <div id="resultado"></div>
+  </section>
+</main>
+
+<template id="plantilla-aspersor">
+  <li class="aspersor">
+    <div class="aspersor-cabeza">
+      <span class="numero"></span>
+      <span class="resumen"></span>
+      <button type="button" class="chico" data-accion="copiar" title="Copiar abajo">Copiar</button>
+      <button type="button" class="chico" data-accion="borrar" title="Borrar">Borrar</button>
+    </div>
+    <div class="campos dos">
+      <label class="ancho">Tipo <select data-campo="tipo"></select></label>
+      <label>Boquilla <select data-campo="boquilla"></select></label>
+      <label data-solo="arco">Arco <select data-campo="arco"></select></label>
+      <label data-solo="regulador">Cuerpo Pro-Spray <select data-campo="regulador">
+        <option value="">Sin regulador</option>
+        <option value="PRS30">PRS30 · 2,1 bar</option>
+        <option value="PRS40">PRS40 · 2,8 bar</option>
+      </select></label>
+      <label><span data-texto="distancia"></span> <span class="unidad">m</span><input data-campo="distancia" type="number" inputmode="decimal" step="0.1" min="0"></label>
+      <label>Altura <span class="unidad">m</span><input data-campo="altura" type="number" inputmode="decimal" step="0.1"></label>
+    </div>
+  </li>
+</template>
+
+<script src="datos/hunter-2026.js"></script>
+<script src="datos/czerweny.js"></script>
+<script src="app/calculo.js"></script>
+<script src="app/pantalla.js"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo offline: la app igual funciona */ });
+</script>
+</body>
+</html>

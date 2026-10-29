@@ -1,0 +1,152 @@
+:root {
+  --verde: #1f6f4a;
+  --verde-claro: #e3f1e8;
+  --tinta: #1c2622;
+  --suave: #5c6b64;
+  --linea: #d6ded9;
+  --fondo: #f3f6f4;
+  --papel: #ffffff;
+  --campo: #ffffff;
+  --error: #b3261e;
+  --error-fondo: #fdecea;
+  --aviso: #8a5a00;
+  --aviso-fondo: #fff4d6;
+  --info: #2b5a85;
+  --info-fondo: #e8f1fa;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --verde: #5cc28e;
+    --verde-claro: #183528;
+    --tinta: #e6ece8;
+    --suave: #9aaba2;
+    --linea: #33403a;
+    --fondo: #121815;
+    --papel: #1b2420;
+    --campo: #141b18;
+    --error: #ff8a80;
+    --error-fondo: #3a1714;
+    --aviso: #ffcc66;
+    --aviso-fondo: #362a0c;
+    --info: #8ec5ff;
+    --info-fondo: #142636;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--tinta);
+  font: 16px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+.barra {
+  background: var(--verde);
+  color: #fff;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+}
+.barra h1 { margin: 0; font-size: 1.25rem; }
+.barra p { margin: 2px 0 0; opacity: .85; font-size: .85rem; }
+@media (prefers-color-scheme: dark) { .barra { background: #163f2c; } }
+
+main { max-width: 720px; margin: 0 auto; padding: 12px 16px calc(32px + env(safe-area-inset-bottom)); }
+
+.tarjeta {
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  margin-bottom: 12px;
+}
+.tarjeta h2 { margin: 0 0 10px; font-size: 1.05rem; color: var(--verde); }
+
+.campos { display: grid; gap: 10px; }
+.campos.dos { grid-template-columns: 1fr 1fr; }
+.campos .ancho { grid-column: 1 / -1; }
+/* Rótulo y unidad en la misma línea, el campo debajo ocupando todo el ancho. */
+label {
+  display: grid; grid-template-columns: max-content 1fr; align-items: baseline;
+  column-gap: 4px; row-gap: 4px; font-size: .85rem; color: var(--suave); min-width: 0;
+}
+label > input, label > select { grid-column: 1 / -1; }
+.unidad { font-size: .75rem; opacity: .8; }
+input[type=number], select {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;            /* evita que el iPhone haga zoom al tocar */
+  color: var(--tinta);
+  background: var(--campo);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  padding: 9px 10px;
+  min-height: 44px;
+}
+input:focus, select:focus { outline: 2px solid var(--verde); outline-offset: 1px; }
+
+.opciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.opciones label, .tilde {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  color: var(--tinta); font-size: .95rem;
+}
+.opciones label {
+  border: 1px solid var(--linea); border-radius: 999px; padding: 8px 14px; min-height: 44px;
+}
+.opciones label:has(input:checked) { background: var(--verde-claro); border-color: var(--verde); }
+.tilde { margin-top: 12px; min-height: 44px; }
+input[type=radio], input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--verde); margin: 0; }
+.ayuda { margin: 4px 0 0; font-size: .8rem; color: var(--suave); }
+
+.aspersores { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.aspersor { border: 1px solid var(--linea); border-radius: 12px; padding: 10px 12px 12px; }
+.aspersor-cabeza { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.numero {
+  flex: none; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--verde); color: #fff; display: grid; place-items: center; font-weight: 600; font-size: .9rem;
+}
+@media (prefers-color-scheme: dark) { .numero { color: #0d1a13; } }
+.resumen { flex: 1; font-size: .85rem; color: var(--suave); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+button { font: inherit; cursor: pointer; }
+.boton {
+  width: 100%; margin-top: 12px; min-height: 46px;
+  border: 1px dashed var(--verde); border-radius: 12px;
+  background: transparent; color: var(--verde); font-weight: 600;
+}
+.chico {
+  border: 1px solid var(--linea); border-radius: 8px; background: transparent;
+  color: var(--suave); font-size: .8rem; padding: 6px 10px; min-height: 34px;
+}
+
+.ajustes { margin-top: 14px; font-size: .9rem; }
+.ajustes summary { color: var(--suave); cursor: pointer; min-height: 32px; }
+.ajustes label { margin-top: 8px; }
+
+/* Resultado */
+.cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.cifra { background: var(--verde-claro); border-radius: 10px; padding: 10px; }
+.cifra b { display: block; font-size: 1.35rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.cifra span { font-size: .75rem; color: var(--suave); }
+@media (max-width: 380px) { .cifras { grid-template-columns: 1fr 1fr; } }
+
+.avisos { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.avisos li { border-radius: 10px; padding: 8px 10px; font-size: .88rem; border-left: 4px solid; }
+.avisos .error { background: var(--error-fondo); border-color: var(--error); }
+.avisos .aviso { background: var(--aviso-fondo); border-color: var(--aviso); }
+.avisos .info  { background: var(--info-fondo); border-color: var(--info); }
+.todo-bien { background: var(--verde-claro); border-radius: 10px; padding: 8px 10px; font-size: .9rem; margin: 0 0 12px; }
+
+.tabla { overflow-x: auto; margin: 0 -4px 12px; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+th { color: var(--suave); font-weight: 600; font-size: .75rem; }
+th:first-child, td:first-child { text-align: left; }
+td.mal { color: var(--error); font-weight: 600; }
+tr.elegido td { background: var(--verde-claro); font-weight: 600; }
+h3 { font-size: .9rem; margin: 14px 0 6px; color: var(--suave); }
+.recorrido { font-size: .88rem; margin: 0 0 12px; padding-left: 18px; }
+.recorrido li { margin: 2px 0; }

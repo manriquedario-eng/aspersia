@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de datos Hunter</title>
+<style>
+  :root { --tinta:#1d2a33; --suave:#5b6b75; --linea:#d5dde2; --fondo:#f6f8f9; --papel:#fff; --acento:#0b6e8a; --aviso:#fff1c7; --aviso-borde:#d9a400; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo); color:var(--tinta); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.5rem; margin:.2em 0; }
+  h2 { font-size:1.2rem; margin:2em 0 .3em; color:var(--acento); border-bottom:2px solid var(--acento); padding-bottom:.2em; }
+  h3 { font-size:1rem; margin:1.2em 0 .3em; }
+  p.nota, .ayuda { color:var(--suave); margin:.2em 0 .6em; }
+  .ayuda { background:var(--papel); border:1px solid var(--linea); border-radius:8px; padding:10px 14px; }
+  .marcada-ej { background:var(--aviso); border-left:4px solid var(--aviso-borde); padding:0 6px; }
+  .grilla { display:flex; flex-wrap:wrap; gap:12px; }
+  .caja { background:var(--papel); border:1px solid var(--linea); border-radius:8px; padding:8px 10px; overflow-x:auto; max-width:100%; }
+  table { border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:3px 8px; text-align:right; border-bottom:1px solid var(--linea); white-space:nowrap; }
+  th { color:var(--suave); font-weight:600; font-size:.85rem; }
+  td:first-child, th:first-child { text-align:left; }
+  tr.rec td { font-weight:700; }
+  tr.dif td { background:var(--aviso); }
+  tr.dif td:first-child { border-left:4px solid var(--aviso-borde); }
+  .sector { font-weight:700; color:var(--acento); }
+  tbody tr.inicio td { border-top:2px solid var(--linea); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Control de datos Hunter</h1>
+  <p class="nota" id="fuente"></p>
+  <div class="ayuda">
+    Cada tabla indica la página del catálogo. Los números están copiados tal cual y ya se compararon
+    automáticamente con el texto del PDF (524 filas, todas iguales).<br>
+    <b>Negrita</b> = presión recomendada por Hunter.
+    <span class="marcada-ej">Fila amarilla</span> = en el catálogo, m³/h y l/min no coinciden más allá del redondeo
+    (se muestra cuánto daría la conversión).
+  </div>
+  <div id="contenido"></div>
+</main>
+<script src="hunter-2026.js"></script>
+<script src="czerweny.js"></script>
+<script>
+const H = window.HUNTER;
+const $c = document.getElementById('contenido');
+document.getElementById('fuente').textContent = 'Fuente: ' + H.fuente;
+const n = (v, d) => v.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+// m3/h viene redondeado a 0,01 (±0,083 l/min); l/min a 0,01 o 0,1.
+const difiere = (m3h, lpm) => Math.abs(m3h * 1000 / 60 - lpm) > 0.14;
+
+function seccion(titulo, nota) {
+  $c.insertAdjacentHTML('beforeend', `<h2>${titulo}</h2>` + (nota ? `<p class="nota">${nota}</p>` : ''));
+  const g = document.createElement('div'); g.className = 'grilla'; $c.appendChild(g); return g;
+}
+// dl = decimales de l/min, los mismos que usa el catálogo en esa tabla.
+function fila(etiqueta, bar, radio, m3h, lpm, dl, rec, inicio) {
+  const d = difiere(m3h, lpm);
+  const cls = [rec ? 'rec' : '', d ? 'dif' : '', inicio ? 'inicio' : ''].join(' ');
+  const r = Array.isArray(radio) ? `${n(radio[0],1)} × ${n(radio[1],1)}` : n(radio, 1);
+  return `<tr class="${cls}"><td>${etiqueta}</td><td>${n(bar,1)}</td><td>${r}</td><td>${n(m3h,2)}</td>`
+    + `<td>${n(lpm, dl)}</td><td>${d ? '≈ ' + n(m3h*1000/60, 2) : ''}</td></tr>`;
+}
+function tabla(g, titulo, sub, filasHtml, primera = 'Sector', radioTit = 'Radio m') {
+  g.insertAdjacentHTML('beforeend', `<div class="caja"><h3>${titulo}</h3>${sub ? `<p class="nota">${sub}</p>` : ''}
+    <table><thead><tr><th>${primera}</th><th>bar</th><th>${radioTit}</th><th>m³/h</th><th>l/min</th><th>conversión</th></tr></thead>
+    <tbody>${filasHtml}</tbody></table></div>`);
+}
+function porSector(grupo, b, dl) {
+  let h = '';
+  for (const [s, filas] of Object.entries(b.sectores))
+    filas.forEach((f, i) => h += fila(i === 0 ? `<span class="sector">${s}°</span>` : '', grupo.presiones[i], f[0], f[1], f[2], dl, grupo.presiones[i] === grupo.recomendada, i === 0));
+  return h;
+}
+
+let g = seccion(`Boquillas Pro de arco fijo (cuerpo Pro-Spray) — pág. ${H.proFijas.pagina}`);
+for (const b of H.proFijas.boquillas)
+  tabla(g, `${b.modelo} · ${b.color}`, `Radio ${n(b.radioNominal,1)} m · trayectoria ${b.trayectoria}°` + (b.nota ? `<br>${b.nota}` : ''), porSector(H.proFijas, b, 2));
+
+g = seccion(`Boquillas ajustables Pro (cuerpo Pro-Spray) — pág. ${H.proAjustables.pagina}`);
+for (const b of H.proAjustables.boquillas)
+  tabla(g, `${b.modelo} · ${b.color}`, `Radio ${n(b.radioNominal,1)} m · arco de 0° a 360°`, porSector(H.proAjustables, b, 2));
+
+g = seccion(`MP Rotator — págs. 53 y 54`, 'Presión óptima 2,8 bar (cuerpo Pro-Spray PRS40).');
+for (const b of H.mpRotator.boquillas)
+  tabla(g, `${b.modelo} · pág. ${b.pagina || H.mpRotator.pagina}`, `Radio ${b.radioNominal} m<br>${b.colores}`, porSector(H.mpRotator, b, 2));
+for (const b of H.mpRotator.franjas.boquillas) {
+  let h = ''; b.filas.forEach((f, i) => h += fila('', H.mpRotator.presiones[i], f[0], f[1], f[2], 2, H.mpRotator.presiones[i] === H.mpRotator.recomendada));
+  tabla(g, `${b.modelo} · pág. 54`, b.nombre, h, '', 'Ancho × largo m');
+}
+
+g = seccion(`Turbina PGP Ultra — págs. 25 a 27`, `Rango recomendado ${n(H.pgpUltra.rangoRecomendado[0],1)} a ${n(H.pgpUltra.rangoRecomendado[1],1)} bar. El caudal es el de la boquilla, sin importar el arco.`);
+const series = [...new Set(H.pgpUltra.boquillas.map(b => b.serie))];
+for (const s of series) {
+  let h = ''; let pag;
+  for (const b of H.pgpUltra.boquillas.filter(x => x.serie === s)) {
+    pag = b.pagina;
+    b.filas.forEach((f, i) => h += fila(i === 0 ? `<span class="sector">${b.modelo}</span>` : '', H.pgpUltra.presiones[i], f[0], f[1], f[2], 1, false, i === 0));
+  }
+  tabla(g, `${s} · pág. ${pag}`, '', h, 'Boquilla');
+}
+for (const b of H.pgpUltra.mpr.boquillas)
+  tabla(g, `${b.modelo} · pág. 27`, 'Tabla por sector', porSector(H.pgpUltra.mpr, b, 1));
+
+g = seccion('Cuerpos Pro-Spray — págs. 67, 68 y 70');
+g.insertAdjacentHTML('beforeend', `<div class="caja"><table><thead><tr><th>Cuerpo</th><th>Regula a</th><th>Uso</th><th>Pág.</th></tr></thead><tbody>`
+  + H.proSpray.cuerpos.map(c => `<tr><td>${c.modelo}</td><td>${c.regula ? n(c.regula,1) + ' bar' : '—'}</td><td>${c.uso || ''}</td><td>${c.pagina}</td></tr>`).join('')
+  + `</tbody></table><p class="nota">Funcionan de ${n(H.proSpray.rangoFuncionamiento[0],0)} a ${n(H.proSpray.rangoFuncionamiento[1],0)} bar.</p></div>`);
+
+g = seccion(`Electroválvula PGV de 1" — pérdida de carga — pág. ${H.pgv1.pagina}`);
+g.insertAdjacentHTML('beforeend', `<div class="caja"><table><thead><tr><th>Caudal m³/h</th><th>Pérdida bar</th></tr></thead><tbody>`
+  + H.pgv1.perdida.map(([q, p]) => `<tr><td>${n(q,1)}</td><td>${n(p,2)}</td></tr>`).join('') + `</tbody></table></div>`);
+
+// Bombas Czerweny: una tabla por línea, modelos en filas y caudales en columnas.
+const C = window.CZERWENY;
+$c.insertAdjacentHTML('beforeend', `<h2>Bombas Czerweny</h2><p class="nota">${C.fuente}. Alturas en m.c.a. (1 bar ≈ ${n(C.mcaPorBar,1)} m).
+  <span class="marcada-ej">Fila amarilla</span> = la tabla de la ficha no coincide con su curva dibujada.</p>`);
+for (const L of C.lineas) {
+  g = document.createElement('div'); g.className = 'grilla'; $c.appendChild(g);
+  const cab = L.caudales.map(q => `<th>${n(q, q % 1 ? 1 : 0)}</th>`).join('');
+  const filas = L.modelos.map(m => `<tr class="${m.duda ? 'dif' : ''}"><td>${m.modelo}</td><td>${n(m.hp, m.hp % 1 ? 2 : 0)}</td><td>${m.tension}</td>`
+    + L.caudales.map((_, i) => `<td>${m.alturas[i] != null ? n(m.alturas[i], L.origen === 'curva' ? 0 : 1) : ''}</td>`).join('') + '</tr>').join('');
+  const dudas = L.modelos.filter(m => m.duda).map(m => `<br><b>${m.modelo}:</b> ${m.duda}`).join('');
+  const aviso = L.origen === 'curva' ? '<br><b>Sin tabla en la ficha: valores leídos del gráfico, aproximados (±1 a 2 m).</b>' : '';
+  g.insertAdjacentHTML('beforeend', `<div class="caja"><h3>${L.linea} · ${L.tipo}</h3>
+    <p class="nota">Para: ${L.uso}<br>Archivo: fichas/czerweny/${L.archivo} — pág. ${L.pagina}${aviso}${L.nota ? '<br>' + L.nota : ''}${dudas}</p>
+    <table><thead><tr><th>Modelo</th><th>HP</th><th>Tensión</th>${cab}</tr>
+    <tr><th></th><th></th><th></th><th colspan="${L.caudales.length}" style="text-align:center">caudal en l/min → altura en m.c.a.</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>`);
+}
+</script>
+</body>
+</html>
