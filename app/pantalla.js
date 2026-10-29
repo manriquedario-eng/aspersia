@@ -106,7 +106,7 @@
     actual = null;
     $('vista-obra').hidden = false;
     $('vista-sector').hidden = true;
-    $('subtitulo').textContent = obra.nombre ? `Obra: ${obra.nombre}` : 'Cálculo de riego · Hunter · Czerweny';
+    $('subtitulo').textContent = obra.nombre ? `Obra: ${obra.nombre}` : 'Riegos Tecnológicos';
     if (location.hash) history.replaceState(null, '', location.pathname);
     pintarObra();
   }
@@ -172,7 +172,7 @@
     obra.sectores.push(sectorNuevo(obra.sectores.length + 1));
     abrirSector(obra.sectores.length - 1);
   });
-  $('obra-nombre').addEventListener('input', ev => { obra.nombre = ev.target.value; $('subtitulo').textContent = obra.nombre ? `Obra: ${obra.nombre}` : 'Cálculo de riego · Hunter · Czerweny'; guardar(); });
+  $('obra-nombre').addEventListener('input', ev => { obra.nombre = ev.target.value; $('subtitulo').textContent = obra.nombre ? `Obra: ${obra.nombre}` : 'Riegos Tecnológicos'; guardar(); });
 
   const enlacesObra = {
     presion: v => obra.fuente.bar = numero(v),

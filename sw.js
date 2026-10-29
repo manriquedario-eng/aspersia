@@ -1,7 +1,7 @@
 // Modo sin señal: guarda la app en el teléfono la primera vez y después la abre desde ahí.
 // Cuando hay señal, baja en segundo plano la versión nueva, que se ve la próxima vez que se abre.
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
-const VERSION = 'aspersia-v2';
+const VERSION = 'aspersia-v3';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const ARCHIVOS = [
   'app/pantalla.js',
   'datos/hunter-2026.js',
   'datos/czerweny.js',
+  'app/marca/marca.png',
   'app/iconos/icono-180.png',
   'app/iconos/icono-192.png',
   'app/iconos/icono-512.png',
