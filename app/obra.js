@@ -66,16 +66,17 @@
   // la distancia de cada uno es el tramo de caño desde la conexión anterior y la manguera, la recta hasta el caño.
   const MANGUERA_MINIMA = 0.5;   // aunque el aspersor esté pegado al caño, siempre lleva un poco de manguera
   const tieneRamal = s => !!(s.ramal && s.ramal.length && s.valvulaPos);
+  // Los que todavía no están ubicados en el plano quedan al final, con lo que se escribió a mano.
   function aplicarRamal(s) {
     const G = global.GEOMETRIA;
-    if (s.aspersores.some(a => a.x == null)) return;
-    const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, s.aspersores);
-    const ordenados = con.map(c => s.aspersores[c.i]);
+    const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
+    const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados);
+    const ordenados = con.map(c => ubicados[c.i]);
     con.forEach((c, k) => {
       ordenados[k].distancia = r1(c.tramo);
       ordenados[k].manguera = Math.max(MANGUERA_MINIMA, r1(c.manguera));
     });
-    s.aspersores.splice(0, s.aspersores.length, ...ordenados);   // mismo arreglo: lo que lo tenga a mano lo sigue viendo
+    s.aspersores.splice(0, s.aspersores.length, ...ordenados, ...G.sinUbicar(s));   // mismo arreglo: lo que lo tenga a mano lo sigue viendo
   }
   const largoRamal = s => tieneRamal(s) ? global.GEOMETRIA.largoDeLinea([s.valvulaPos, ...s.ramal]) : null;
   const codosRamal = s => tieneRamal(s) ? s.ramal.length - 1 : 0;
@@ -91,7 +92,7 @@
     const f = obra.plano.fuente;
     for (const s of obra.sectores) {
       if (tieneRamal(s)) aplicarRamal(s);
-      else if (desdePlano) global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => s.aspersores[i].distancia = d);
+      else if (desdePlano) global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => { if (d != null) s.aspersores[i].distancia = d; });
       if (desdePlano) s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
     }
   }
@@ -121,6 +122,7 @@
     obra.sectores.forEach((s, k) => {
       const c = calcular(obra, s);
       s.aspersores.forEach((a, i) => {
+        if (a.x == null || a.y == null) return;                       // sin ubicar todavía: no se dibuja
         let e;
         try { e = R().emisor(idEmisor(a)); } catch { return; }      // aspersor con un dato inválido: no se dibuja
         const radio = c.r ? c.r.aspersores[i].radio : e.radios[Math.floor(e.radios.length / 2)];
@@ -132,5 +134,8 @@
     return lista;
   }
 
-  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  // Superficie de las zonas a regar dibujadas en el plano (m²), o null si no hay ninguna.
+  const superficieZonas = obra => obra.plano?.zonas?.length ? obra.plano.zonas.reduce((t, z) => t + global.GEOMETRIA.areaPoligono(z), 0) : null;
+
+  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, superficieZonas, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

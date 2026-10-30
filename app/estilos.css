@@ -363,3 +363,16 @@ ol.pasos li { margin: 4px 0; }
 .plano .codo { fill: #fff; }
 .plano .pieza.elegida .codo { fill: var(--agua); }
 .plano .manguera { stroke-opacity: .9; }
+/* Zonas a regar y botones del plano */
+.plano .fuera-zona { fill: rgba(15, 23, 42, .45); pointer-events: none; }
+.plano .zona { fill: none; stroke: var(--hoja); stroke-linejoin: round; pointer-events: none; }
+.plano .zona.elegida { stroke: var(--agua); }
+.plano .zona-tocar { fill: none; stroke: transparent; pointer-events: stroke; }
+.plano .zona-nueva { fill: rgba(88, 160, 3, .18); }
+.plano .lado-elegido { stroke: #facc15; stroke-linecap: round; pointer-events: none; }
+.plano .texto-lado { fill: #fff; stroke: rgba(0, 0, 0, .65); paint-order: stroke; text-anchor: middle; font-weight: 700; pointer-events: none; }
+.plano .vertice { fill: #fff; stroke: var(--agua); }
+.botones-plano { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.botones-plano .boton { margin: 0; }
+.sin-ubicar { flex-wrap: wrap; }
+.sin-ubicar i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }

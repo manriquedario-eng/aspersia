@@ -141,11 +141,11 @@
         </div>
         <details id="fondo-caja" class="fondo">
           <summary>Foto o captura del terreno de fondo</summary>
-          <p class="ayuda">En Google Maps poné la vista satélite, acercate al lote y sacá una captura de pantalla. Cargala acá y después escalala con una medida que conozcas (por ejemplo, el frente del lote).</p>
+          <p class="ayuda">En Google Maps poné la vista satélite, acercate al lote y sacá una captura de pantalla. Cargala acá, marcá con toques las esquinas de la parte que se riega y tocá un lado que conozcas (por ejemplo, el frente) para escribir cuánto mide: todo queda a escala.</p>
           <label class="principal ancho archivo">Cargar foto o captura
             <input id="fondo-archivo" type="file" accept="image/*"></label>
           <div id="fondo-acciones" hidden>
-            <button id="fondo-escalar" class="principal lleno ancho" type="button">Escalar con una medida</button>
+            <button id="fondo-escalar" class="chico" type="button">Escalar con dos puntos cualquiera</button>
             <div id="fondo-calibrar" class="calibrar" hidden>
               <p id="fondo-paso" class="ayuda"></p>
               <div id="fondo-medida" hidden>
@@ -178,6 +178,7 @@
           <button type="button" data-modo="3d" aria-selected="false">Vista 3D</button>
         </div>
         <div id="plano-filtro" class="filtro"></div>
+        <div id="plano-acciones"></div>
         <div id="plano-3d-caja" class="plano-caja" hidden>
           <div id="plano-3d" class="plano plano-3d"></div>
           <div class="plano-botones">

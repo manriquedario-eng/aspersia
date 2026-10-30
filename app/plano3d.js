@@ -47,11 +47,12 @@
       grad.addColorStop(0, 'rgba(250,204,21,.5)'); grad.addColorStop(1, 'rgba(148,163,184,.35)');
       g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
     } else if (conCobertura && aspersores.length) {
-      const cob = G.cobertura(terreno, aspersores, Math.max(0.1, Math.min(0.25, Math.max(terreno.ancho, terreno.largo) / 240)));
+      const cob = G.cobertura(terreno, aspersores, Math.max(0.1, Math.min(0.25, Math.max(terreno.ancho, terreno.largo) / 240)), terreno.zonas);
       const cw = c.width / cob.nx, ch = c.height / cob.ny;
       g.globalAlpha = imagenFondo ? 0.5 : 1;   // sobre la foto, más suave para que se vea el terreno
       for (let j = 0; j < cob.ny; j++) for (let i = 0; i < cob.nx; i++) {
         const n = cob.cuenta[j * cob.nx + i];
+        if (n === G.FUERA) continue;   // fuera de las zonas a regar
         g.fillStyle = n === 0 ? 'rgba(225,29,72,.42)' : n === 1 ? 'rgba(234,179,8,.38)' : 'rgba(10,154,233,.16)';
         g.fillRect(i * cw, c.height - (j + 1) * ch, cw + 0.5, ch + 0.5);
       }
@@ -187,12 +188,13 @@
       tapa.position.set(aX(s.valvulaPos.x), 0.19, aZ(s.valvulaPos.y)); scene.add(tapa);
       // Con el ramal dibujado: caño principal hasta el último codo y una manguera recta de cada aspersor al caño
       const conRamal = s.ramal && s.ramal.length;
+      const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
       const v3 = p => new T.Vector3(aX(p.x), 0.03, aZ(p.y));
-      const puntos = (conRamal ? [fuente, s.valvulaPos, ...s.ramal] : [fuente, s.valvulaPos, ...s.aspersores]).map(v3);
+      const puntos = (conRamal ? [fuente, s.valvulaPos, ...s.ramal] : [fuente, s.valvulaPos, ...ubicados]).map(v3);
       const linea = new T.Line(new T.BufferGeometry().setFromPoints(puntos), new T.LineDashedMaterial({ color, dashSize: 0.4, gapSize: 0.25 }));
       linea.computeLineDistances(); scene.add(linea);
-      if (conRamal) for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, s.aspersores))
-        scene.add(new T.Line(new T.BufferGeometry().setFromPoints([v3(s.aspersores[c.i]), v3(c.punto)]), new T.LineBasicMaterial({ color })));
+      if (conRamal) for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados))
+        scene.add(new T.Line(new T.BufferGeometry().setFromPoints([v3(ubicados[c.i]), v3(c.punto)]), new T.LineBasicMaterial({ color })));
     });
     const bomba = new T.Mesh(new T.BoxGeometry(0.5, 0.4, 0.4), new T.MeshLambertMaterial({ color: 0x0b4a8f }));
     bomba.position.set(aX(fuente.x), 0.2, aZ(fuente.y)); scene.add(bomba);

@@ -19,7 +19,7 @@
     valvula: true,
     lateral: { material: 'pvc-k6', nominal: 32 },
     manguera: 'pe-12',
-    aspersores: [0, 1, 2, 3].map(aspersorInicial),
+    aspersores: [],   // sin fila de ejemplo (Darío): se agregan en el plano con "+ Aspersor" o en Diseño
   });
   function obraNueva(datos) {
     const numero = datos.siguienteNumero++;
@@ -70,6 +70,7 @@
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
       o.plano ||= planoNuevo();
+      o.plano.zonas ??= [];          // zonas a regar dibujadas sobre la foto
       o.plano.norte ??= 0;           // rumbo del norte en el plano (0 = arriba, como Google Maps)
       o.plano.verSol ??= false;      // degradé del lado del sol
       // Se sacó marcar casas, muros y árboles (30-oct-2026): se borra lo que haya quedado guardado.

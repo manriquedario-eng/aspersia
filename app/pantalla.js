@@ -259,7 +259,8 @@
     pintarFondo();
     PLANO.iniciar(planoActual());
     if (modoPlano === '3d') cambiarModoPlano('2d');
-    empezarEscala();
+    PLANO.dibujarZona();   // lo siguiente: marcar la parte que se riega y escalar con un lado
+    $('plano-svg').scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
   function empezarEscala() {
@@ -311,7 +312,9 @@
   const planoActual = () => ({
     obra, svg: $('plano-svg'), botones: $('plano-botones'), seleccion: $('plano-seleccion'),
     estadisticas: $('plano-estadisticas'), filtro: $('plano-filtro'), aspersores: aspersoresDelPlano,
-    leyenda: $('plano-leyenda'), rosa: $('plano-rosa'),
+    leyenda: $('plano-leyenda'), rosa: $('plano-rosa'), acciones: $('plano-acciones'),
+    // Al escalar con un lado de la zona cambia el tamaño del terreno y de la foto
+    alEscalar: () => { $('plano-ancho').value = obra.plano.ancho; $('plano-largo').value = obra.plano.largo; pintarFondo(); },
     alCambiar: () => { sincronizarDistancias(); guardar(); },
   });
   $('plano-ancho').addEventListener('change', ev => medidaTerreno('ancho', ev.target.value));
@@ -369,10 +372,12 @@
       L.push(`Total del sector: ${fmt(c.r.caudalTotal, 1)} l/min · variación de presión ${fmt(c.r.variacion, 0)} % · caño recomendado ${c.rec.recomendado ? c.rec.recomendado + ' mm' : 'ninguno cumple'}.`);
       for (const a of c.r.avisos) L.push(`  Aviso (${a.nivel}): ${a.texto}`);
     });
-    if (obra.plano && obra.sectores.every(s => s.aspersores.every(a => a.x != null))) {
-      const cob = GEO.cobertura(obra.plano, aspersoresDelPlano());
+    if (obra.plano && aspersoresDelPlano().length) {
+      const cob = GEO.cobertura(obra.plano, aspersoresDelPlano(), 0.25, obra.plano.zonas);
+      const sup = O.superficieZonas(obra);
       L.push('');
-      L.push(`COBERTURA DEL PLANO (todos los sectores): ${fmt(cob.seco, 0)} % seco, ${fmt(cob.uno, 0)} % con un solo aspersor, ${fmt(cob.bien, 0)} % bien cubierto.`);
+      if (sup) L.push(`ZONAS A REGAR dibujadas en el plano: ${fmt(sup, 1)} m² en total; puntos de cada una: ${obra.plano.zonas.map(z => z.map(p => `(${fmt(p.x, 1)}; ${fmt(p.y, 1)})`).join(' ')).join(' | ')}.`);
+      L.push(`COBERTURA DEL PLANO (todos los sectores${sup ? ', solo dentro de las zonas' : ''}): ${fmt(cob.seco, 0)} % seco, ${fmt(cob.uno, 0)} % con un solo aspersor, ${fmt(cob.bien, 0)} % bien cubierto.`);
       const norte = obra.plano.norte || 0;
       L.push(`ORIENTACIÓN: el norte está hacia ${SOL.ladoDelPlano(norte)} del plano (las posiciones x, y son en metros: x hacia la derecha, y hacia arriba). El lado de ${SOL.ladoDelPlano(norte)} recibe más sol.`);
     }
@@ -635,20 +640,19 @@
     const i = Number(ev.target.closest('.aspersor').dataset.i);
     const asps = sector().aspersores;
     if (accion === 'copiar') asps.splice(i + 1, 0, desplazado(asps[i]));
-    if (accion === 'borrar') { if (asps.length === 1) return; asps.splice(i, 1); }
+    if (accion === 'borrar') asps.splice(i, 1);
     sincronizarDistancias();
     armarAspersores();
     pintarSector();
   });
-  // Copia de un aspersor corrida en el plano (si no, quedaría encima del original y a distancia 0).
+  // Copia de un aspersor: la misma tobera, sin ubicar en el plano (se ubica tocándolo en la lista "sin ubicar" del plano).
   function desplazado(a) {
-    const b = { ...a };
-    if (a.x != null) b.x = r1(Math.min(obra.plano.ancho, a.x + Math.max(1, a.distancia || 3)));
+    const { x, y, ...b } = a;
     return b;
   }
   $('agregar').addEventListener('click', () => {
     const asps = sector().aspersores;
-    asps.push(desplazado(asps.at(-1)));
+    asps.push(asps.length ? desplazado(asps.at(-1)) : A.aspersorInicial(0));
     sincronizarDistancias();
     armarAspersores();
     pintarSector();

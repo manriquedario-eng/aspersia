@@ -79,6 +79,7 @@
     const notas = [];
 
     obra.sectores.forEach((s, i) => {
+      if (!s.aspersores.length) return;   // sector todavía sin aspersores: no lleva materiales
       let r = null;
       try { r = R.calcularSector(sectorParaCalcular(s)); } catch { notas.push(`El ${s.nombre || 'sector ' + (i + 1)} tiene un error y no se contó.`); return; }
       const mang = s.manguera && R.MANGUERAS[s.manguera];
@@ -140,6 +141,12 @@
     if (obra.fuente.tipo === 'bomba') {
       const b = R.bomba(obra.fuente.linea, obra.fuente.modelo);
       sumar(`bomba-${b.linea}-${b.modelo}`, 'Materiales', `Bomba Czerweny ${b.modelo} (${R.fmt(b.hp, b.hp % 1 ? 2 : 0)} HP, ${b.tension.split(' (')[0]})`, 'u', 1);
+    }
+    // Con zonas a regar dibujadas en el plano, la superficie es la de esas zonas (fórmula del cordón de zapato).
+    const zonas = obra.plano?.zonas || [];
+    if (zonas.length) {
+      m2 = zonas.reduce((t, z) => t + Math.abs(z.reduce((u, p, k) => { const q = z[(k + 1) % z.length]; return u + p.x * q.y - q.x * p.y; }, 0)) / 2, 0);
+      m2Estimados = false;
     }
     sumar('mo-m2', 'Mano de obra', 'Mano de obra de instalación del riego', 'm²', Math.round(m2));
     if (m2Estimados) notas.push('Hay sectores sin superficie cargada: los m² se estimaron con el alcance de los aspersores.');

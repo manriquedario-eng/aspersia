@@ -281,3 +281,25 @@ test('ramal dibujado: orden por el caño, tramos, mangueras hasta el caño, codo
   O.sincronizarDistancias(o);
   assert.deepEqual(s.aspersores.map(a => a.distancia), [4, 4, 4, 4]);
 });
+
+test('zonas: la mano de obra usa los m² dibujados; los aspersores sin ubicar no se dibujan ni rompen el ramal', () => {
+  const { o, datos } = obraDePrueba();
+  o.plano.zonas = [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 6 }, { x: 0, y: 6 }], [{ x: 12, y: 0 }, { x: 16, y: 0 }, { x: 14, y: 4 }]];
+  assert.equal(O.superficieZonas(o), 60 + 8);
+  const pre = O.presupuesto(o, {});
+  assert.equal(pre.renglones.find(r => r.clave === 'mo-m2').cantidad, 68);
+  // Un sector nuevo arranca vacío y no da error en el presupuesto
+  assert.equal(A.sectorNuevo(3).aspersores.length, 0);
+  o.sectores.push(A.sectorNuevo(3));
+  assert.ok(!O.presupuesto(o, {}).notas.some(n => /error/.test(n)));
+  // Con ramal: el que no está ubicado queda al final y no se dibuja
+  const s = o.sectores[0];
+  s.valvulaPos = { x: 0, y: 0 };
+  s.ramal = [{ x: 10, y: 0 }];
+  s.aspersores.forEach((a, i) => { a.x = 8 - i * 3; a.y = 1; });
+  delete s.aspersores[0].x;
+  O.sincronizarDistancias(o);
+  assert.equal(s.aspersores.at(-1).x, undefined, 'el sin ubicar queda último');
+  assert.ok(O.aspersoresDelPlano(o).filter(a => a.s === 0).every(a => a.x != null));
+  assert.equal(O.aspersoresDelPlano(o).filter(a => a.s === 0).length, s.aspersores.length - 1);
+});

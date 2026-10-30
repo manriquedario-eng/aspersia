@@ -1,5 +1,6 @@
 // Plano de la obra: terreno, aspersores con su abanico real, válvulas, fuente, caños, cobertura y lado del sol.
-// Se arrastra con el dedo (aspersores, válvulas y fuente), se gira tocando un aspersor y se hace zoom con dos dedos.
+// Se arrastra con el dedo (aspersores, válvulas, fuente, codos y esquinas de zonas), se gira tocando un aspersor y se hace zoom con dos dedos.
+// Zonas a regar dibujadas sobre la foto (se escala con la medida real de un lado); aspersores que se agregan tocando el plano.
 // Dibuja en SVG con coordenadas en metros. Usa GEOMETRIA (app/geometria.js) y SOL (app/sol.js).
 
 (function (global) {
@@ -11,12 +12,11 @@
 
   let ctx = null;        // { obra, aspersores(), alCambiar(), contenedor, ... }
   let vista = null;      // viewBox actual { x, y, w, h } en metros (y del SVG, hacia abajo)
-  let seleccion = null;  // { tipo: 'asp'|'valvula'|'fuente', s, i }
+  let seleccion = null;  // { tipo: 'asp'|'valvula'|'fuente'|'codo'|'zona'|'vertice', s, i }
   let soloSector = null; // índice de sector a mostrar, o null para todos
   let cuadro = 0;
-  let marcando = null;   // { n, etiquetas, puntos: [{x, y}], alMarcar(n), alTerminar(...puntos) } mientras se marcan puntos con toques
-
-
+  let marcando = null;   // { tipo, n, etiquetas, puntos: [{x, y}], alMarcar(n), alTerminar(...puntos) } mientras se marcan puntos con toques
+  let midiendo = null;   // { zona, lado } o { esperando: true }: elegir el lado de una zona que se conoce, para escalar
   const plano = () => ctx.obra.plano;
   const Y = y => plano().largo - y;          // del plano (y hacia arriba) al SVG (y hacia abajo)
   const el = (tag, attrs = {}, padre) => {
@@ -50,7 +50,7 @@
     for (let j = 0; j < c.ny; j++) for (let i = 0; i < c.nx; i++) {
       const n = c.cuenta[j * c.nx + i];
       const k = ((c.ny - 1 - j) * c.nx + i) * 4;      // la fila 0 de la grilla es el borde de abajo del terreno
-      const [r, gr, b, al] = n === 0 ? [225, 29, 72, 110] : n === 1 ? [234, 179, 8, 80] : [10, 154, 233, 28];
+      const [r, gr, b, al] = n === G.FUERA ? [0, 0, 0, 0] : n === 0 ? [225, 29, 72, 110] : n === 1 ? [234, 179, 8, 80] : [10, 154, 233, 28];
       img.data[k] = r; img.data[k + 1] = gr; img.data[k + 2] = b; img.data[k + 3] = al;
     }
     g.putImageData(img, 0, 0);
@@ -78,19 +78,50 @@
     for (let x = 1; x < t.ancho; x++) el('line', { x1: x, y1: 0, x2: x, y2: t.largo, class: x % 5 ? '' : 'fuerte' }, grilla);
     for (let y = 1; y < t.largo; y++) el('line', { x1: 0, y1: Y(y), x2: t.ancho, y2: Y(y), class: y % 5 ? '' : 'fuerte' }, grilla);
     const asps = visibles();
+    const P = p => `${p.x},${Y(p.y)}`;
+    const zonas = t.zonas || [];
+    // Zonas a regar: lo de afuera se oscurece; la cobertura y el sol se pintan solo adentro
+    let recorte = {};
+    if (zonas.length) {
+      const clip = el('clipPath', { id: 'clip-zonas' }, el('defs', {}, svg));
+      for (const z of zonas) el('polygon', { points: z.map(P).join(' ') }, clip);
+      recorte = { 'clip-path': 'url(#clip-zonas)' };
+      const fuera = `M ${vista.x} ${vista.y} h ${vista.w} v ${vista.h} h ${-vista.w} Z ` + zonas.map(z => `M ${z.map(P).join(' L ')} Z`).join(' ');
+      el('path', { d: fuera, 'fill-rule': 'evenodd', class: 'fuera-zona' }, svg);
+    }
     // Cobertura
     let cob = null;
     if (t.verCobertura && asps.length) {
-      cob = G.cobertura(t, asps, Math.max(0.1, Math.min(0.25, Math.max(t.ancho, t.largo) / 240)));
+      cob = G.cobertura(t, asps, Math.max(0.1, Math.min(0.25, Math.max(t.ancho, t.largo) / 240)), zonas);
       el('image', { href: imagenCobertura(cob), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: t.fondo ? 'cobertura sobre-fondo' : 'cobertura' }, svg);
     }
+    // Borde de cada zona (se toca el borde para elegirla), esquinas y medidas de los lados si está elegida
+    zonas.forEach((z, k) => {
+      const elegida = (seleccion?.tipo === 'zona' || seleccion?.tipo === 'vertice') && seleccion.s === k;
+      el('polygon', { points: z.map(P).join(' '), 'stroke-width': 2.5 * escala, class: `zona ${elegida ? 'elegida' : ''}` }, svg);
+      el('polygon', { points: z.map(P).join(' '), 'stroke-width': 16 * escala, 'data-zona': k, class: 'zona-tocar' }, svg);
+      if (midiendo?.zona === k) {
+        const a = z[midiendo.lado], b = z[(midiendo.lado + 1) % z.length];
+        el('line', { x1: a.x, y1: Y(a.y), x2: b.x, y2: Y(b.y), 'stroke-width': 6 * escala, class: 'lado-elegido' }, svg);
+      }
+      if (elegida || midiendo) z.forEach((a, i) => {
+        const b = z[(i + 1) % z.length];
+        const txt = el('text', { x: (a.x + b.x) / 2, y: Y((a.y + b.y) / 2), 'font-size': 11 * escala, 'stroke-width': 3 * escala, class: 'texto-lado' }, svg);
+        txt.textContent = `${fmt1(Math.hypot(b.x - a.x, b.y - a.y))} m`;
+      });
+      if (elegida) z.forEach((p, i) => {
+        const g = el('g', { 'data-mover': 'vertice', 'data-s': k, 'data-i': i, class: 'pieza' }, svg);
+        el('circle', { cx: p.x, cy: Y(p.y), r: 14 * escala, class: 'tocar' }, g);
+        el('circle', { cx: p.x, cy: Y(p.y), r: 5 * escala, 'stroke-width': 1.5 * escala, class: 'vertice' }, g);
+      });
+    });
     // Sol: degradé suave del lado norte (más sol) al lado sur (menos sol), según hacia dónde está el norte
     if (t.verSol) {
       const d = S.degradeSol(t, t.norte || 0);
       const grad = el('linearGradient', { id: 'degrade-sol', gradientUnits: 'userSpaceOnUse', x1: d.norte.x, y1: Y(d.norte.y), x2: d.sur.x, y2: Y(d.sur.y) }, el('defs', {}, svg));
       el('stop', { offset: 0, 'stop-color': '#facc15', 'stop-opacity': 0.5 }, grad);
       el('stop', { offset: 1, 'stop-color': '#94a3b8', 'stop-opacity': 0.35 }, grad);
-      el('rect', { x: 0, y: 0, width: t.ancho, height: t.largo, fill: 'url(#degrade-sol)', class: 'capa-sol' }, svg);
+      el('rect', { x: 0, y: 0, width: t.ancho, height: t.largo, fill: 'url(#degrade-sol)', class: 'capa-sol', ...recorte }, svg);
     }
     // Abanicos
     const abanicos = el('g', {}, svg);
@@ -103,18 +134,18 @@
     const sectores = ctx.obra.sectores;
     const canos = el('g', { class: 'canos' }, svg);
     const rf = 9 * escala;
-    const P = p => `${p.x},${Y(p.y)}`;
     const guiones = { 'stroke-dasharray': `${6 * escala} ${4 * escala}`, fill: 'none' };
     sectores.forEach((s, k) => {
       if (soloSector != null && k !== soloSector) return;
+      const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
       if (!O().tieneRamal(s)) {
-        el('polyline', { points: [t.fuente, s.valvulaPos, ...s.aspersores].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 2 * escala, ...guiones }, canos);
+        el('polyline', { points: [t.fuente, s.valvulaPos, ...ubicados].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 2 * escala, ...guiones }, canos);
         return;
       }
       el('polyline', { points: [t.fuente, s.valvulaPos].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 2 * escala, ...guiones }, canos);
       el('polyline', { points: [s.valvulaPos, ...s.ramal].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 4 * escala, ...guiones, class: 'ramal' }, canos);
-      for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, s.aspersores)) {
-        const a = s.aspersores[c.i];
+      for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados)) {
+        const a = ubicados[c.i];
         el('line', { x1: a.x, y1: Y(a.y), x2: c.punto.x, y2: Y(c.punto.y), stroke: colorSector(k), 'stroke-width': 1.5 * escala, class: 'manguera' }, canos);
         el('circle', { cx: c.punto.x, cy: Y(c.punto.y), r: 2.5 * escala, fill: colorSector(k) }, canos);
       }
@@ -141,7 +172,9 @@
     if (marcando) {
       const rc = 6 * escala;
       const linea = marcando.desde ? [marcando.desde, ...marcando.puntos] : marcando.puntos;
-      if (linea.length > 1)
+      if (marcando.tipo === 'zona' && linea.length > 2)
+        el('polygon', { points: linea.map(P).join(' '), 'stroke-width': 2.5 * escala, class: 'linea-calibrar zona-nueva' }, svg);
+      else if (linea.length > 1)
         el('polyline', { points: linea.map(P).join(' '), fill: 'none', 'stroke-width': 2.5 * escala, class: 'linea-calibrar' }, svg);
       marcando.puntos.forEach((p, k) => {
         el('circle', { cx: p.x, cy: Y(p.y), r: rc, 'stroke-width': 1.5 * escala, class: 'marca-calibrar' }, svg);
@@ -171,7 +204,25 @@
     const piezas = '▲ fuente · ■ válvula · punteado: caño · línea fina: manguera · □ codo';
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol ? `<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ${piezas}`
       : t.verCobertura ? `<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ${piezas}` : piezas;
+    pintarAcciones();
     pintarSeleccion();
+  }
+
+  // Botones de arriba del plano: agregar aspersores, dibujar la zona a regar y los aspersores que faltan ubicar.
+  function pintarAcciones() {
+    if (!ctx.acciones) return;
+    const t = plano(), ocupado = !!(marcando || midiendo);
+    const faltan = [];
+    ctx.obra.sectores.forEach((s, k) => {
+      if (soloSector != null && k !== soloSector) return;
+      s.aspersores.forEach((a, i) => { if (a.x == null || a.y == null) faltan.push({ k, i, a }); });
+    });
+    ctx.acciones.innerHTML = `<div class="botones-plano">
+        <button type="button" class="boton" data-plano="aspersores" ${ocupado ? 'disabled' : ''}>+ Aspersor</button>
+        <button type="button" class="boton" data-plano="zona" ${ocupado ? 'disabled' : ''}>${(t.zonas || []).length ? '+ Otra zona' : 'Dibujar zona a regar'}</button>
+      </div>` + (faltan.length ? `<p class="ayuda">Sin ubicar en el plano (tocá uno y después tocá dónde va):</p>
+      <div class="filtro sin-ubicar">${faltan.map(f => `<button type="button" data-ubicar="${f.k},${f.i}" class="${marcando?.tipo === 'ubicar' && marcando.s === f.k && marcando.i === f.i ? 'activo' : ''}">
+        <i style="background:${colorSector(f.k)}"></i>${nombre(f.k).replace(/[<>&]/g, '')} · ${f.i + 1}: ${f.a.boquilla || ''} ${f.a.arco ? f.a.arco + '°' : ''}</button>`).join('')}</div>` : '');
   }
 
   // Panel del elemento tocado: posición exacta y giro.
@@ -187,7 +238,57 @@
         <button type="button" class="chico" data-ramal="cancelar">Cancelar</button></div>`;
       return;
     }
-    if (!seleccion) { caja.innerHTML = '<p class="ayuda">Tocá un aspersor para girarlo o ponerle la posición exacta. Arrastrá para moverlo; con dos dedos, zoom. Tocá la válvula para dibujar el caño principal.</p>'; return; }
+    const botones = lista => `<div class="giros">${lista.map(([accion, texto, clase = '', off = false]) => `<button type="button" class="chico ${clase}" data-modo-accion="${accion}" ${off ? 'disabled' : ''}>${texto}</button>`).join('')}</div>`;
+    if (marcando?.tipo === 'zona') {
+      const n = marcando.puntos.length;
+      caja.innerHTML = `<p class="sel-titulo">Zona a regar</p>
+        <p class="ayuda">Tocá en el plano cada esquina de la parte que se riega (la tierra o el pasto), una después de la otra, dando la vuelta. Arrastrar sigue moviendo la vista.</p>
+        <p class="ayuda"><b>${n}</b> ${n === 1 ? 'esquina marcada' : 'esquinas marcadas'}${n < 3 ? ' (hacen falta por lo menos 3)' : ''}.</p>
+        ${botones([['zona-listo', 'Listo', 'activo', n < 3], ['deshacer', 'Deshacer', '', !n], ['cancelar', 'Cancelar']])}`;
+      return;
+    }
+    if (marcando?.tipo === 'aspersores') {
+      caja.innerHTML = `<p class="sel-titulo">Agregar aspersores a ${nombre(marcando.s)}</p>
+        <p class="ayuda">Tocá en el plano dónde va cada aspersor. Sale con la misma tobera que el último; después lo tocás para cambiarle el arco y hacia dónde apunta.</p>
+        <p class="ayuda"><b>${marcando.puestos}</b> ${marcando.puestos === 1 ? 'agregado' : 'agregados'}.</p>
+        ${botones([['cancelar', 'Listo', 'activo']])}`;
+      return;
+    }
+    if (marcando?.tipo === 'elegir-sector') {
+      caja.innerHTML = `<p class="sel-titulo">¿En qué sector va el aspersor?</p>
+        <div class="giros">${ctx.obra.sectores.map((s, k) => `<button type="button" class="chico" data-sector-nuevo="${k}">${nombre(k).replace(/[<>&]/g, '')}</button>`).join('')}</div>
+        ${botones([['cancelar', 'Cancelar']])}`;
+      return;
+    }
+    if (marcando?.tipo === 'ubicar') {
+      caja.innerHTML = `<p class="sel-titulo">Ubicar el aspersor ${marcando.i + 1} de ${nombre(marcando.s)}</p>
+        <p class="ayuda">Tocá en el plano dónde va.</p>${botones([['cancelar', 'Cancelar']])}`;
+      return;
+    }
+    if (midiendo) {
+      const z = midiendo.esperando ? null : plano().zonas[midiendo.zona];
+      const largo = z && Math.hypot(z[(midiendo.lado + 1) % z.length].x - z[midiendo.lado].x, z[(midiendo.lado + 1) % z.length].y - z[midiendo.lado].y);
+      caja.innerHTML = midiendo.esperando
+        ? `<p class="sel-titulo">¿Qué lado conocés?</p><p class="ayuda">Tocá en el plano el lado de la zona que sabés cuánto mide (por ejemplo, el frente). Todo se va a escalar con esa medida.</p>
+          ${botones([['medir-cancelar', 'Ahora no']])}`
+        : `<p class="sel-titulo">Lado elegido (marcado en amarillo)</p>
+          <p class="ayuda">En el plano mide ${fmt1(largo)} m. ¿Cuánto mide en la realidad?</p>
+          <label>Medida real <span class="unidad">m</span><input type="number" inputmode="decimal" step="0.1" min="0.1" data-medida-real></label>
+          ${botones([['medir-aplicar', 'Aplicar', 'activo'], ['medir-otro', 'Otro lado'], ['medir-cancelar', 'Ahora no']])}
+          ${midiendo.error ? `<p class="ayuda aviso-arco">${midiendo.error}</p>` : ''}`;
+      return;
+    }
+    if (!seleccion) {
+      caja.innerHTML = `<p class="ayuda">${(plano().zonas || []).length ? '' : 'Empezá dibujando la zona a regar (botón de arriba del plano). '}Tocá un aspersor para girarlo, cambiarle el arco o quitarlo; arrastralo para moverlo. Tocá la válvula para dibujar el caño principal. Con dos dedos, zoom.</p>`;
+      return;
+    }
+    if (seleccion.tipo === 'zona' || seleccion.tipo === 'vertice') {
+      const z = plano().zonas[seleccion.s];
+      caja.innerHTML = `<p class="sel-titulo">Zona a regar ${seleccion.s + 1}: ${fmt1(G.areaPoligono(z))} m²</p>
+        <p class="ayuda">Arrastrá los puntitos de las esquinas para acomodarla. Las medidas de los lados están en el plano.</p>
+        ${botones([['medir', 'Escalar con un lado'], ...(seleccion.tipo === 'vertice' && z.length > 3 ? [['quitar-esquina', 'Quitar esta esquina']] : []), ['quitar-zona', 'Quitar zona', 'peligro']])}`;
+      return;
+    }
     const obj = objeto(seleccion);
     let titulo = 'Fuente de agua (bomba o llave)';
     let giro = '';
@@ -215,7 +316,8 @@
       giro = manguera + controlArco(obj, a) + (a && a.arco >= 360 && !a.franja ? '<p class="ayuda">Círculo completo: no hace falta girarlo.</p>' : `
         <label>Hacia dónde apunta <span class="unidad">° (0 = arriba, 90 = derecha, 180 = abajo, 270 = izquierda)</span><input type="number" inputmode="numeric" step="5" data-sel="giro" value="${Math.round(obj.giro || 0)}"></label>
         <div class="giros"><button type="button" class="chico" data-girar="-45">⟲ 45°</button><button type="button" class="chico" data-girar="-15">⟲ 15°</button>
-        <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`);
+        <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`)
+        + botones([['quitar-asp', 'Quitar aspersor', 'peligro']]);
     }
     caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>
       <div class="campos dos">
@@ -249,6 +351,7 @@
     if (sel.tipo === 'fuente') return plano().fuente;
     if (sel.tipo === 'valvula') return ctx.obra.sectores[sel.s].valvulaPos;
     if (sel.tipo === 'codo') return ctx.obra.sectores[sel.s].ramal[sel.i];
+    if (sel.tipo === 'vertice') return plano().zonas[sel.s][sel.i];
     return ctx.obra.sectores[sel.s].aspersores[sel.i];
   }
 
@@ -294,6 +397,90 @@
     }
   }
 
+  // ---------- Zonas a regar, agregar y ubicar aspersores ----------
+  const r2 = v => Math.round(v * 100) / 100;
+  function dibujarZona() {
+    seleccion = null; midiendo = null;
+    marcando = { tipo: 'zona', n: Infinity, etiquetas: null, puntos: [], alMarcar: () => pintarSeleccion(), alTerminar: () => {} };
+    pintar();
+  }
+  // "+ Aspersor": cada toque agrega uno en el sector elegido, con la misma tobera que el último del sector.
+  function agregarAspersores(k) {
+    seleccion = null;
+    if (k == null) { marcando = { tipo: 'elegir-sector', n: 0, puntos: [] }; return pintar(); }
+    marcando = { tipo: 'aspersores', s: k, n: Infinity, etiquetas: [], puntos: [], puestos: 0,
+      alMarcar: () => {
+        const s = ctx.obra.sectores[k], p = marcando.puntos.pop();
+        const ubicados = s.aspersores.filter(a => a.x != null);
+        const base = ubicados.at(-1) || s.aspersores.at(-1) || global.ALMACEN.aspersorInicial(0);
+        const anterior = ubicados.at(-1) || s.valvulaPos;
+        const { x, y, ...tobera } = base;
+        // Apunta hacia el centro de la zona más cercana (en el borde, así riega hacia adentro y no a la vereda)
+        const zonas = plano().zonas || [];
+        const zona = zonas.find(z => G.dentroDePoligono(z, p.x, p.y)) || (zonas.length ? zonas[G.ladoMasCercano(zonas, p).zona] : null);
+        const centro = zona && { x: zona.reduce((t, q) => t + q.x, 0) / zona.length, y: zona.reduce((t, q) => t + q.y, 0) / zona.length };
+        const giro = centro ? Math.round(G.rumbo(centro.x - p.x, centro.y - p.y) / 5) * 5 % 360 : (base.giro ?? 0);
+        s.aspersores.push({ ...tobera, x: r1(p.x), y: r1(p.y), giro,
+          distancia: r1(Math.hypot(p.x - anterior.x, p.y - anterior.y)) || 1, manguera: base.manguera ?? 1 });
+        marcando.puestos++;
+        avisarCambio(true);
+        pintar();
+      } };
+    pintar();
+  }
+  function ubicar(k, i) {
+    seleccion = null;
+    marcando = { tipo: 'ubicar', s: k, i, n: 1, etiquetas: [''], puntos: [], alTerminar: p => {
+      const a = ctx.obra.sectores[k].aspersores[i];
+      a.x = r1(p.x); a.y = r1(p.y); a.giro ??= 0;
+      marcando = null;
+      seleccion = { tipo: 'asp', s: k, i };
+      avisarCambio(true);
+      pintar();
+    } };
+    pintar();
+  }
+  // Escalar con la medida real de un lado de la zona: todo el plano (foto, zonas, aspersores) se multiplica.
+  function aplicarMedida(valor) {
+    const z = plano().zonas[midiendo.zona], a = z[midiendo.lado], b = z[(midiendo.lado + 1) % z.length];
+    let k;
+    try { k = G.factorDeEscala(a, b, valor); } catch { midiendo.error = 'Escribí cuántos metros mide ese lado.'; return pintar(); }
+    G.escalarPlano(plano(), ctx.obra.sectores, k);
+    if (plano().fondo) plano().fondo.escala = { metros: valor };
+    midiendo = null;
+    avisarCambio(true);
+    ctx.alEscalar?.();
+    ajustar(); pintar();
+  }
+  function accionModo(accion) {
+    const quitar = (boton, hacer) => {
+      if (!boton.dataset.confirmar) { boton.dataset.confirmar = '1'; boton.textContent = 'Tocá de nuevo para confirmar'; return; }
+      hacer();
+    };
+    return {
+      'deshacer': () => { marcando.puntos.pop(); pintar(); },
+      'cancelar': () => { marcando = null; pintar(); },
+      'zona-listo': () => {
+        const z = marcando.puntos.map(p => ({ x: r2(p.x), y: r2(p.y) }));
+        (plano().zonas ||= []).push(z);
+        marcando = null;
+        seleccion = { tipo: 'zona', s: plano().zonas.length - 1 };
+        midiendo = { esperando: true };   // enseguida: ¿qué lado conocés?
+        avisarCambio(false);
+        pintar();
+      },
+      'medir': () => { midiendo = { esperando: true }; pintar(); },
+      'medir-otro': () => { midiendo = { esperando: true }; pintar(); },
+      'medir-cancelar': () => { midiendo = null; pintar(); },
+      'medir-aplicar': () => aplicarMedida(parseFloat(String(ctx.seleccion.querySelector('[data-medida-real]')?.value).replace(',', '.'))),
+      'quitar-esquina': () => {
+        plano().zonas[seleccion.s].splice(seleccion.i, 1);
+        seleccion = { tipo: 'zona', s: seleccion.s };
+        avisarCambio(false); pintar();
+      },
+    }[accion];
+  }
+
   // Vista que muestra todo el terreno con un margen.
   function ajustar() {
     const t = plano(), m = Math.max(1.5, Math.max(t.ancho, t.largo) * 0.06);
@@ -327,13 +514,15 @@
       gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y), vista: { ...vista } };
       return;
     }
-    const pieza = marcando ? null : ev.target.closest('[data-mover]');   // al marcar puntos, un toque marca un punto
+    const libre = !marcando && !midiendo;     // al marcar puntos o elegir un lado, un toque marca; no agarra piezas
+    const pieza = libre ? ev.target.closest('[data-mover]') : null;
+    const zona = libre && !pieza ? ev.target.closest('[data-zona]') : null;
     const p = aSVG(ev);
     if (pieza) {
       const sel = { tipo: pieza.dataset.mover, s: Number(pieza.dataset.s), i: Number(pieza.dataset.i) };
       const obj = objeto(sel);
       gesto = { tipo: 'mover', sel, dx: obj.x - p.x, dy: obj.y - (plano().largo - p.y), x0: ev.clientX, y0: ev.clientY, movio: false };
-    } else gesto = { tipo: 'mirar', x0: ev.clientX, y0: ev.clientY, vista: { ...vista }, movio: false };
+    } else gesto = { tipo: 'mirar', x0: ev.clientX, y0: ev.clientY, vista: { ...vista }, movio: false, zona: zona ? Number(zona.dataset.zona) : null };
   }
   function alMover(ev) {
     if (!punteros.has(ev.pointerId) || !gesto) return;
@@ -370,14 +559,24 @@
       if (!gesto.movio) { if (!mismaPieza(seleccion, gesto.sel)) avisoArco = ''; seleccion = gesto.sel; }
       avisarCambio(gesto.movio);
       pintar();
-    } else if (gesto.tipo === 'mirar' && !gesto.movio && marcando) {
+    } else if (gesto.tipo === 'mirar' && !gesto.movio && midiendo?.esperando) {
+      // Elegir el lado de la zona que se conoce: el más cercano al toque
+      const p = aSVG(ev), lado = G.ladoMasCercano(plano().zonas || [], { x: p.x, y: plano().largo - p.y });
+      if (lado) midiendo = { zona: lado.zona, lado: lado.lado };
+      pintar();
+      ctx.seleccion.querySelector('[data-medida-real]')?.focus();
+    } else if (gesto.tipo === 'mirar' && !gesto.movio && marcando && marcando.tipo !== 'elegir-sector') {
       const p = aSVG(ev), m = marcando;
       if (m.puntos.length === m.n) m.puntos = [];
       m.puntos.push({ x: p.x, y: plano().largo - p.y });
       pintar();
       if (m.puntos.length === m.n) m.alTerminar(...m.puntos);
       else m.alMarcar?.(m.puntos.length);
-    } else if (gesto.tipo === 'mirar' && !gesto.movio) { seleccion = null; avisoArco = ''; pintar(); }
+    } else if (gesto.tipo === 'mirar' && !gesto.movio && !marcando) {
+      seleccion = gesto.zona != null ? { tipo: 'zona', s: gesto.zona } : null;
+      avisoArco = '';
+      pintar();
+    }
     if (punteros.size === 0) gesto = null;
   }
 
@@ -389,6 +588,7 @@
     seleccion = null;
     marcando = null;
     avisoArco = '';
+    midiendo = null;
     if (soloSector != null && soloSector >= ctx.obra.sectores.length) soloSector = null;
     if (primera) {
       const svg = ctx.svg;
@@ -433,12 +633,40 @@
           }
           return accionRamal(ramal.dataset.ramal);
         }
+        const sectorNuevo = ev.target.closest('[data-sector-nuevo]');
+        if (sectorNuevo) return agregarAspersores(Number(sectorNuevo.dataset.sectorNuevo));
+        const modo = ev.target.closest('[data-modo-accion]');
+        if (modo) {
+          const accion = modo.dataset.modoAccion;
+          // Quitar algo pide un segundo toque
+          if (accion === 'quitar-zona' || accion === 'quitar-asp') {
+            if (!modo.dataset.confirmar) { modo.dataset.confirmar = '1'; modo.textContent = 'Tocá de nuevo para quitar'; return; }
+            if (accion === 'quitar-zona') { plano().zonas.splice(seleccion.s, 1); avisarCambio(false); }
+            else { ctx.obra.sectores[seleccion.s].aspersores.splice(seleccion.i, 1); avisarCambio(true); }
+            seleccion = null;
+            return pintar();
+          }
+          return accionModo(accion)?.();
+        }
         const b = ev.target.closest('[data-girar]');
         if (!b || !seleccion) return;
         const obj = objeto(seleccion);
         obj.giro = (((obj.giro || 0) + Number(b.dataset.girar)) % 360 + 360) % 360;
         avisarCambio(false);
         pintar();
+      });
+      // Botones de arriba del plano
+      ctx.acciones?.addEventListener('click', ev => {
+        const b = ev.target.closest('[data-plano], [data-ubicar]');
+        if (!b) return;
+        if (b.dataset.ubicar) { const [k, i] = b.dataset.ubicar.split(',').map(Number); ubicar(k, i); }
+        else if (b.dataset.plano === 'zona') dibujarZona();
+        else {
+          const sectores = ctx.obra.sectores;
+          const delElegido = ['asp', 'valvula', 'codo'].includes(seleccion?.tipo) ? seleccion.s : null;
+          agregarAspersores(soloSector ?? (sectores.length === 1 ? 0 : delElegido));
+        }
+        ctx.svg.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
       ctx.filtro.addEventListener('click', ev => {
         const b = ev.target.closest('[data-filtro]');
@@ -464,6 +692,7 @@
   const calibrar = (alMarcar, alTerminar) => marcar({ n: 2, etiquetas: ['A', 'B'], alMarcar, alTerminar });
 
   global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, soloSector: () => soloSector, calibrar, dejarDeCalibrar: dejarDeMarcar,
+    dibujarZona: () => ctx && dibujarZona(),
     reencuadrar: () => { if (ctx) { ajustar(); pintar(); } },
-    coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores()) : null };
+    coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores(), 0.25, plano().zonas) : null };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -29,30 +29,60 @@
     return difAngulo(rumbo(dx, dy), asp.giro) <= asp.arco / 2 + 1e-9;
   }
 
+  // ---------- Zonas a regar ----------
+  // Polígonos que se dibujan sobre la foto (la parte de tierra o pasto). Pueden tener cualquier forma.
+  // Superficie (m²) por la fórmula del cordón de zapato.
+  const areaPoligono = pol => Math.abs(pol.reduce((t, p, i) => { const q = pol[(i + 1) % pol.length]; return t + p.x * q.y - q.x * p.y; }, 0)) / 2;
+  // ¿El punto está adentro? (rayo hacia la derecha; sirve para polígonos con entrantes)
+  function dentroDePoligono(pol, x, y) {
+    let dentro = false;
+    for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+      const a = pol[i], b = pol[j];
+      if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) dentro = !dentro;
+    }
+    return dentro;
+  }
+  const enZonas = (zonas, x, y) => zonas.some(z => dentroDePoligono(z, x, y));
+  // Lado de alguna zona más cercano a un punto (para tocar el lado que se conoce y escalar con su medida).
+  function ladoMasCercano(zonas, p) {
+    let mejor = null;
+    zonas.forEach((z, k) => z.forEach((a, i) => {
+      const b = z[(i + 1) % z.length], c = puntoMasCercano([a, b], p);
+      if (!mejor || c.distancia < mejor.distancia) mejor = { zona: k, lado: i, a, b, distancia: c.distancia, largo: Math.hypot(b.x - a.x, b.y - a.y) };
+    }));
+    return mejor;
+  }
+
   // Cuenta cuántos aspersores llegan a cada punto del terreno (una grilla de "paso" metros).
   // Devuelve la grilla y los porcentajes: seco (0), uno solo (1) y bien cubierto (2 o más).
-  function cobertura(terreno, aspersores, paso = 0.25) {
+  // Con zonas dibujadas, solo cuenta lo de adentro: lo de afuera queda marcado FUERA y no entra en los porcentajes.
+  const FUERA = 255;
+  function cobertura(terreno, aspersores, paso = 0.25, zonas = null) {
     const nx = Math.max(1, Math.round(terreno.ancho / paso)), ny = Math.max(1, Math.round(terreno.largo / paso));
     const cuenta = new Uint8Array(nx * ny);
+    const conZonas = zonas && zonas.length;
     for (let j = 0; j < ny; j++) {
       const y = (j + 0.5) * terreno.largo / ny;
       for (let i = 0; i < nx; i++) {
         const x = (i + 0.5) * terreno.ancho / nx;
+        if (conZonas && !enZonas(zonas, x, y)) { cuenta[j * nx + i] = FUERA; continue; }
         let n = 0;
-        for (const a of aspersores) if (riega(a, x, y)) { n++; if (n === 255) break; }
+        for (const a of aspersores) if (riega(a, x, y)) { n++; if (n === FUERA - 1) break; }
         cuenta[j * nx + i] = n;
       }
     }
-    let seco = 0, uno = 0;
-    for (const c of cuenta) { if (c === 0) seco++; else if (c === 1) uno++; }
-    const total = nx * ny;
+    let seco = 0, uno = 0, total = 0;
+    for (const c of cuenta) { if (c === FUERA) continue; total++; if (c === 0) seco++; else if (c === 1) uno++; }
+    total ||= 1;
     return { nx, ny, cuenta, seco: seco / total * 100, uno: uno / total * 100, bien: (total - seco - uno) / total * 100 };
   }
 
   // Distancias del caño a partir del plano: de la válvula al primer aspersor y de cada uno al siguiente, en línea recta.
+  // Los que todavía no están ubicados en el plano dan null (conservan la distancia que se escribió a mano).
   function distanciasDesdePlano(valvula, aspersores) {
     let px = valvula.x, py = valvula.y;
     return aspersores.map(a => {
+      if (a.x == null || a.y == null) return null;
       const d = Math.hypot(a.x - px, a.y - py);
       px = a.x; py = a.y;
       return Math.round(d * 10) / 10;
@@ -91,21 +121,15 @@
       });
   }
 
-  // Ubicación de arranque para los aspersores que todavía no están en el plano:
-  // cada sector en una fila, separados según las distancias que ya tenían cargadas.
+  // Ubicación de arranque de las válvulas que todavía no están en el plano: una debajo de la otra, junto a la fuente.
+  // Los aspersores NO se ubican solos (Darío no quiere una fila automática): quedan "sin ubicar" hasta que se los pone.
   function ubicarSinPosicion(terreno, sectores) {
-    const filas = sectores.length + 1;
     sectores.forEach((s, k) => {
-      const y = Math.round(terreno.largo * (k + 1) / filas * 10) / 10;
-      if (!s.valvulaPos) s.valvulaPos = { x: 0.5, y };
-      let x = s.valvulaPos.x;
-      for (const a of s.aspersores) {
-        x = Math.min(terreno.ancho, x + Math.max(0.5, a.distancia || 1));
-        if (a.x == null || a.y == null) { a.x = Math.round(x * 10) / 10; a.y = y; }
-        if (a.giro == null) a.giro = 0;
-      }
+      if (!s.valvulaPos) s.valvulaPos = { x: 0.5, y: Math.round(Math.max(0.5, terreno.largo - 1 - k * 1.2) * 10) / 10 };
+      for (const a of s.aspersores) if (a.x != null && a.giro == null) a.giro = 0;
     });
   }
+  const sinUbicar = s => s.aspersores.filter(a => a.x == null || a.y == null);
 
   // Escala del plano a partir de una medida conocida: dos puntos (en los metros actuales del plano) y su largo real.
   // Devuelve el factor por el que hay que multiplicar todo para que esa distancia mida lo que dice el usuario.
@@ -115,7 +139,7 @@
     return metrosReales / d;
   }
 
-  // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas y aspersores.
+  // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas, aspersores, ramales y zonas.
   // Todo se multiplica desde la esquina de abajo a la izquierda, así cada cosa queda sobre el mismo lugar de la imagen.
   function escalarPlano(plano, sectores, k) {
     const r1 = v => Math.round(v * 100) / 100;
@@ -125,8 +149,9 @@
     const mover = p => { if (p && p.x != null) { p.x = r1(p.x * k); p.y = r1(p.y * k); } };
     mover(plano.fuente);
     for (const s of sectores) { mover(s.valvulaPos); s.aspersores.forEach(mover); (s.ramal || []).forEach(mover); }
+    for (const z of plano.zonas || []) z.forEach(mover);
   }
 
   global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
-    largoDeLinea, puntoMasCercano, conexionesAlRamal };
+    largoDeLinea, puntoMasCercano, conexionesAlRamal, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
 })(typeof window !== 'undefined' ? window : globalThis);

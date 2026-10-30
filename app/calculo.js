@@ -205,7 +205,7 @@
       distancia: a.distancia || 0, altura: a.altura || 0,
       manguera: mang ? Math.max(0, a.manguera || 0) : 0,
     }));
-    if (!asps.length) throw new Error('El sector no tiene aspersores');
+    if (!asps.length) throw new Error('El sector todavía no tiene aspersores: ponelos en el plano con "+ Aspersor" o con "+ Agregar aspersor".');
     const pump = sector.fuente.tipo === 'bomba' ? bomba(sector.fuente.linea, sector.fuente.modelo) : null;
     const pgv = global.HUNTER.pgv1;
 

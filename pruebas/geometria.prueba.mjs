@@ -79,14 +79,39 @@ test('escala con una medida conocida: todo el plano se agranda junto con la imag
   assert.throws(() => G.factorDeEscala({ x: 0, y: 0 }, { x: 1, y: 1 }, 0));
 });
 
-test('ubicación de arranque: respeta las distancias y no pisa lo ya ubicado', () => {
+test('arranque: las válvulas se ubican solas, los aspersores no (sin fila automática)', () => {
   const sectores = [
     { aspersores: [{ distancia: 2 }, { distancia: 3.7 }, { x: 9, y: 9, giro: 30, distancia: 3 }] },
     { aspersores: [{ distancia: 5 }] },
   ];
   G.ubicarSinPosicion({ ancho: 20, largo: 15 }, sectores);
-  assert.deepEqual([sectores[0].aspersores[0].x, sectores[0].aspersores[1].x], [2.5, 6.2]);
-  assert.deepEqual([sectores[0].aspersores[2].x, sectores[0].aspersores[2].y, sectores[0].aspersores[2].giro], [9, 9, 30]);
   assert.ok(sectores[0].valvulaPos && sectores[1].valvulaPos);
-  assert.notEqual(sectores[0].aspersores[0].y, sectores[1].aspersores[0].y, 'cada sector en su fila');
+  assert.notDeepEqual(sectores[0].valvulaPos, sectores[1].valvulaPos, 'cada válvula en su lugar');
+  assert.equal(sectores[0].aspersores[0].x, undefined, 'el que no se ubicó sigue sin ubicar');
+  assert.deepEqual([sectores[0].aspersores[2].x, sectores[0].aspersores[2].y, sectores[0].aspersores[2].giro], [9, 9, 30]);
+  assert.equal(G.sinUbicar(sectores[0]).length, 2);
+  assert.deepEqual(G.distanciasDesdePlano({ x: 0, y: 9 }, sectores[0].aspersores), [null, null, 9]);
+});
+
+test('zonas a regar: superficie, adentro/afuera, lado más cercano y cobertura solo adentro', () => {
+  // Trapecio torcido como la tierra de la captura de Darío, y una L (con entrante)
+  const trapecio = [{ x: 2, y: 1 }, { x: 8, y: 1 }, { x: 10, y: 9 }, { x: 1, y: 8 }];
+  const ele = [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 6 }, { x: 0, y: 6 }];
+  assert.equal(G.areaPoligono(ele), 6 * 2 + 2 * 4);
+  assert.equal(G.areaPoligono([...trapecio].reverse()), G.areaPoligono(trapecio), 'no importa el sentido en que se marcó');
+  assert.ok(G.dentroDePoligono(ele, 1, 5) && G.dentroDePoligono(ele, 5, 1) && !G.dentroDePoligono(ele, 4, 4), 'el entrante de la L queda afuera');
+  const lado = G.ladoMasCercano([trapecio], { x: 5, y: 0.6 });
+  assert.deepEqual([lado.zona, lado.lado, lado.largo], [0, 0, 6]);
+  // Un aspersor en el medio: la cobertura cuenta solo lo de adentro de la zona
+  const t = { ancho: 12, largo: 10 };
+  const cuadrado = [{ x: 4, y: 3 }, { x: 8, y: 3 }, { x: 8, y: 7 }, { x: 4, y: 7 }];
+  const c = G.cobertura(t, [{ x: 6, y: 5, radio: 3, arco: 360, giro: 0 }], 0.25, [cuadrado]);
+  assert.equal(c.seco, 0, 'el círculo de 3 m cubre todo el cuadrado de 4 × 4');
+  assert.ok(c.cuenta.includes(G.FUERA));
+  const sinZona = G.cobertura(t, [{ x: 6, y: 5, radio: 3, arco: 360, giro: 0 }], 0.25);
+  assert.ok(sinZona.seco > 50, 'sin zona cuenta todo el terreno');
+  // Escalar mueve también las zonas
+  const plano = { ancho: 12, largo: 10, fuente: { x: 0, y: 0 }, zonas: [cuadrado.map(p => ({ ...p }))] };
+  G.escalarPlano(plano, [], 2);
+  assert.deepEqual(plano.zonas[0][2], { x: 16, y: 14 });
 });
