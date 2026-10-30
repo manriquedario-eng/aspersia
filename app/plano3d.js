@@ -25,21 +25,32 @@
   };
 
   // ---------- Suelo: césped con cuadrícula, o el mapa de cobertura del plano 2D ----------
-  function texturaSuelo(T, terreno, aspersores, conCobertura) {
+  // La foto de fondo se carga antes de armar el suelo (es una imagen guardada dentro de la obra).
+  function cargarImagen(src) {
+    return new Promise(listo => { const im = new Image(); im.onload = () => listo(im); im.onerror = () => listo(null); im.src = src; });
+  }
+
+  function texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo) {
     const pxm = Math.min(40, 2048 / Math.max(terreno.ancho, terreno.largo));
     const c = document.createElement('canvas');
     c.width = Math.round(terreno.ancho * pxm); c.height = Math.round(terreno.largo * pxm);
     const g = c.getContext('2d');
     g.fillStyle = '#7fbf4d'; g.fillRect(0, 0, c.width, c.height);
+    if (imagenFondo) {
+      const f = terreno.fondo;
+      g.drawImage(imagenFondo, 0, c.height - f.alto * pxm, f.ancho * pxm, f.alto * pxm);
+    }
     if (conCobertura && aspersores.length) {
       const cob = G.cobertura(terreno, aspersores, Math.max(0.1, Math.min(0.25, Math.max(terreno.ancho, terreno.largo) / 240)));
       const cw = c.width / cob.nx, ch = c.height / cob.ny;
+      g.globalAlpha = imagenFondo ? 0.5 : 1;   // sobre la foto, más suave para que se vea el terreno
       for (let j = 0; j < cob.ny; j++) for (let i = 0; i < cob.nx; i++) {
         const n = cob.cuenta[j * cob.nx + i];
         g.fillStyle = n === 0 ? 'rgba(225,29,72,.42)' : n === 1 ? 'rgba(234,179,8,.38)' : 'rgba(10,154,233,.16)';
         g.fillRect(i * cw, c.height - (j + 1) * ch, cw + 0.5, ch + 0.5);
       }
     }
+    g.globalAlpha = 1;
     g.strokeStyle = 'rgba(255,255,255,.35)';
     for (let x = 1; x < terreno.ancho; x++) { g.lineWidth = x % 5 ? 1 : 2.5; g.beginPath(); g.moveTo(x * pxm, 0); g.lineTo(x * pxm, c.height); g.stroke(); }
     for (let y = 1; y < terreno.largo; y++) { g.lineWidth = y % 5 ? 1 : 2.5; g.beginPath(); g.moveTo(0, c.height - y * pxm); g.lineTo(c.width, c.height - y * pxm); g.stroke(); }
@@ -130,6 +141,7 @@
     if (!hayWebGL()) { contenedor.innerHTML = '<p class="ayuda">Este teléfono no puede mostrar 3D (no tiene WebGL).</p>'; return; }
     contenedor.innerHTML = '<p class="ayuda centro">Cargando 3D…</p>';
     await cargarThree();
+    const imagenFondo = datos.terreno.fondo ? await cargarImagen(datos.terreno.fondo.imagen) : null;
     const T = global.THREE;
     contenedor.innerHTML = '';
     const { terreno, aspersores, sectores, fuente, colorSector, conCobertura } = datos;
@@ -147,7 +159,7 @@
     const grande = Math.max(terreno.ancho, terreno.largo);
     const tierra = new T.Mesh(new T.PlaneGeometry(grande * 2.2, grande * 2.2), new T.MeshLambertMaterial({ color: 0x8f9c7a }));
     tierra.rotation.x = -Math.PI / 2; tierra.position.y = -0.02; scene.add(tierra);
-    const suelo = new T.Mesh(new T.PlaneGeometry(terreno.ancho, terreno.largo), new T.MeshLambertMaterial({ map: texturaSuelo(T, terreno, aspersores, conCobertura) }));
+    const suelo = new T.Mesh(new T.PlaneGeometry(terreno.ancho, terreno.largo), new T.MeshLambertMaterial({ map: texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo) }));
     suelo.rotation.x = -Math.PI / 2; scene.add(suelo);
 
     // Huellas de riego (si no se muestra la cobertura) y cabezales

@@ -18,8 +18,17 @@
   const guardar = () => {
     if (obra) obra.actualizada = A.hoy();
     clearTimeout(pendiente);
-    pendiente = setTimeout(() => A.guardar(datos), 150);
+    pendiente = setTimeout(() => { if (!A.guardar(datos)) avisarSinLugar(); }, 150);
   };
+  // El teléfono le da a cada app web unos 5 MB: con muchas fotos de fondo se puede llenar.
+  function avisarSinLugar() {
+    if (document.querySelector('.aviso-flotante')) return;
+    const d = document.createElement('div');
+    d.className = 'aviso-flotante';
+    d.textContent = 'No queda lugar para guardar en el teléfono: lo último que cambiaste no se guardó. Quitá la foto de fondo de alguna obra vieja o borrá obras que ya no uses (antes guardá una copia de seguridad).';
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 12000);
+  }
   // En el iPhone la app puede cerrarse sin aviso al pasar a otra: se guarda también cuando deja de verse.
   window.addEventListener('pagehide', () => A.guardar(datos));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') A.guardar(datos); });
@@ -191,10 +200,94 @@
     $('plano-largo').value = obra.plano.largo;
     $('plano-distancias').checked = usaPlano();
     $('plano-cobertura').checked = obra.plano.verCobertura;
+    pintarFondo();
     guardar();
     PLANO.iniciar(planoActual());
     cambiarModoPlano(modoPlano);
   }
+
+  // ---------- Foto o captura de fondo (por ejemplo, Google Maps en vista satélite) ----------
+  const LADO_MAX_FONDO = 1600;   // px: se achica para que entre en el teléfono (~150 a 300 KB)
+
+  function pintarFondo() {
+    const f = obra.plano.fondo;
+    $('fondo-acciones').hidden = !f;
+    $('fondo-calibrar').hidden = true;
+    if (!f) return;
+    $('fondo-opacidad').value = f.opacidad ?? 70;
+    $('fondo-estado').textContent = f.escala
+      ? `Escalada: entre A y B ${fmt(f.escala.metros, 1)} m. La imagen mide ${fmt(f.ancho, 1)} × ${fmt(f.alto, 1)} m.`
+      : 'Todavía sin escalar: las medidas son aproximadas hasta que la escales con una medida real.';
+  }
+
+  async function achicarImagen(archivo) {
+    const bmp = await createImageBitmap(archivo);
+    const k = Math.min(1, LADO_MAX_FONDO / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return { imagen: c.toDataURL('image/jpeg', 0.75), w: c.width, h: c.height };
+  }
+
+  $('fondo-archivo').addEventListener('change', async ev => {
+    const archivo = ev.target.files[0];
+    ev.target.value = '';
+    if (!archivo) return;
+    let img;
+    try { img = await achicarImagen(archivo); }
+    catch { $('fondo-estado').textContent = 'No se pudo abrir esa imagen. Probá con una captura de pantalla (PNG o JPG).'; $('fondo-acciones').hidden = false; return; }
+    // Mientras no se escale, la imagen ocupa el ancho del terreno actual; el terreno toma el tamaño de la imagen.
+    const ancho = obra.plano.ancho, alto = Math.round(ancho * img.h / img.w * 100) / 100;
+    obra.plano.fondo = { imagen: img.imagen, ancho, alto, opacidad: obra.plano.fondo?.opacidad ?? 70, escala: null };
+    obra.plano.largo = alto;
+    for (const s of obra.sectores) for (const p of [s.valvulaPos, ...s.aspersores]) if (p && p.y != null) p.y = Math.min(alto, p.y);
+    obra.plano.fuente.y = Math.min(alto, obra.plano.fuente.y);
+    $('plano-largo').value = alto;
+    sincronizarDistancias(); guardar();
+    pintarFondo();
+    PLANO.iniciar(planoActual());
+    if (modoPlano === '3d') cambiarModoPlano('2d');
+    empezarEscala();
+  });
+
+  function empezarEscala() {
+    if (modoPlano === '3d') cambiarModoPlano('2d');
+    $('fondo-calibrar').hidden = false;
+    $('fondo-medida').hidden = true;
+    $('fondo-paso').textContent = 'Tocá en el plano el punto A de una medida que conozcas (por ejemplo, una punta del frente del lote).';
+    PLANO.calibrar(
+      () => { $('fondo-paso').textContent = 'Ahora tocá el punto B, la otra punta de esa medida.'; },
+      (a, b) => {
+        $('fondo-paso').textContent = `Marcaste A y B: en el plano miden ${fmt(Math.hypot(b.x - a.x, b.y - a.y), 1)} m. ¿Cuánto miden en la realidad?`;
+        $('fondo-medida').hidden = false;
+        $('fondo-metros').value = '';
+        $('fondo-metros').focus();
+        puntosEscala = [a, b];
+      });
+    $('plano-svg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  let puntosEscala = null;
+  $('fondo-escalar').addEventListener('click', empezarEscala);
+  $('fondo-cancelar').addEventListener('click', () => { PLANO.dejarDeCalibrar(); pintarFondo(); });
+  $('fondo-aplicar').addEventListener('click', () => {
+    const metros = decimal($('fondo-metros').value);
+    let k;
+    try { k = GEO.factorDeEscala(puntosEscala[0], puntosEscala[1], metros); }
+    catch (err) { $('fondo-paso').textContent = err.message; return; }
+    GEO.escalarPlano(obra.plano, obra.sectores, k);
+    obra.plano.fondo.escala = { metros };
+    $('plano-ancho').value = obra.plano.ancho;
+    $('plano-largo').value = obra.plano.largo;
+    sincronizarDistancias(); guardar();
+    PLANO.dejarDeCalibrar();
+    pintarFondo();
+    PLANO.iniciar(planoActual());
+  });
+  $('fondo-opacidad').addEventListener('input', ev => { obra.plano.fondo.opacidad = Number(ev.target.value); guardar(); PLANO.pintar(); });
+  confirmarConSegundoToque($('fondo-quitar'), () => {
+    delete obra.plano.fondo;
+    guardar(); pintarFondo(); PLANO.iniciar(planoActual());
+  });
   const medidaTerreno = (campo, v) => {
     obra.plano[campo] = Math.max(1, Math.min(500, decimal(v)));
     for (const s of obra.sectores) for (const p of [s.valvulaPos, ...s.aspersores]) if (p) {

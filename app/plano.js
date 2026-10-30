@@ -14,6 +14,7 @@
   let seleccion = null;  // { tipo: 'asp'|'valvula'|'fuente', s, i }
   let soloSector = null; // índice de sector a mostrar, o null para todos
   let cuadro = 0;
+  let calibrando = null; // { puntos: [{x, y}], alTerminar(a, b) } mientras se marcan los dos puntos de una medida
 
   const plano = () => ctx.obra.plano;
   const Y = y => plano().largo - y;          // del plano (y hacia arriba) al SVG (y hacia abajo)
@@ -68,8 +69,10 @@
     if (!vista) ajustar();
     svg.setAttribute('viewBox', `${vista.x} ${vista.y} ${vista.w} ${vista.h}`);
     const escala = vista.w / svg.clientWidth || 0.05;            // metros por pixel de pantalla
-    // Terreno y cuadrícula cada metro (más marcada cada 5 m)
-    el('rect', { x: 0, y: 0, width: t.ancho, height: t.largo, class: 'terreno' }, svg);
+    // Foto o captura de fondo (su esquina de abajo a la izquierda es el origen del plano), terreno y cuadrícula cada metro
+    if (t.fondo) el('image', { href: t.fondo.imagen, x: 0, y: Y(t.fondo.alto), width: t.fondo.ancho, height: t.fondo.alto,
+      preserveAspectRatio: 'none', opacity: (t.fondo.opacidad ?? 70) / 100, class: 'fondo-imagen' }, svg);
+    el('rect', { x: 0, y: 0, width: t.ancho, height: t.largo, class: t.fondo ? 'terreno con-fondo' : 'terreno' }, svg);
     const grilla = el('g', { class: 'grilla' }, svg);
     for (let x = 1; x < t.ancho; x++) el('line', { x1: x, y1: 0, x2: x, y2: t.largo, class: x % 5 ? '' : 'fuerte' }, grilla);
     for (let y = 1; y < t.largo; y++) el('line', { x1: 0, y1: Y(y), x2: t.ancho, y2: Y(y), class: y % 5 ? '' : 'fuerte' }, grilla);
@@ -78,7 +81,7 @@
     let cob = null;
     if (t.verCobertura && asps.length) {
       cob = G.cobertura(t, asps, Math.max(0.1, Math.min(0.25, Math.max(t.ancho, t.largo) / 240)));
-      el('image', { href: imagenCobertura(cob), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: 'cobertura' }, svg);
+      el('image', { href: imagenCobertura(cob), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: t.fondo ? 'cobertura sobre-fondo' : 'cobertura' }, svg);
     }
     // Abanicos
     const abanicos = el('g', {}, svg);
@@ -106,6 +109,20 @@
       el('circle', { cx: s.valvulaPos.x, cy: Y(s.valvulaPos.y), r: rf * 2.2, class: 'tocar' }, v);
       el('rect', { x: s.valvulaPos.x - rf * 0.8, y: Y(s.valvulaPos.y) - rf * 0.8, width: rf * 1.6, height: rf * 1.6, fill: colorSector(k), class: 'valvula' }, v);
     });
+    // Puntos marcados para escalar con una medida conocida
+    svg.classList.toggle('calibrando', !!calibrando);
+    if (calibrando) {
+      const rc = 6 * escala;
+      if (calibrando.puntos.length === 2) {
+        const [a, b] = calibrando.puntos;
+        el('line', { x1: a.x, y1: Y(a.y), x2: b.x, y2: Y(b.y), 'stroke-width': 2.5 * escala, class: 'linea-calibrar' }, svg);
+      }
+      calibrando.puntos.forEach((p, k) => {
+        el('circle', { cx: p.x, cy: Y(p.y), r: rc, 'stroke-width': 1.5 * escala, class: 'marca-calibrar' }, svg);
+        const txt = el('text', { x: p.x + rc * 1.4, y: Y(p.y) - rc * 1.2, 'font-size': rc * 3, 'stroke-width': 3 * escala, class: 'texto-calibrar' }, svg);
+        txt.textContent = k ? 'B' : 'A';
+      });
+    }
     // Aspersores (encima de todo)
     for (const a of asps) {
       const g = el('g', { 'data-mover': 'asp', 'data-s': a.s, 'data-i': a.i, class: `pieza ${seleccion?.tipo === 'asp' && seleccion.s === a.s && seleccion.i === a.i ? 'elegida' : ''}` }, svg);
@@ -186,7 +203,7 @@
       gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y), vista: { ...vista } };
       return;
     }
-    const pieza = ev.target.closest('[data-mover]');
+    const pieza = calibrando ? null : ev.target.closest('[data-mover]');   // al escalar, un toque marca un punto
     const p = aSVG(ev);
     if (pieza) {
       const sel = { tipo: pieza.dataset.mover, s: Number(pieza.dataset.s), i: Number(pieza.dataset.i) };
@@ -229,6 +246,13 @@
       if (!gesto.movio) seleccion = gesto.sel;
       ctx.alCambiar(gesto.movio);
       pintar();
+    } else if (gesto.tipo === 'mirar' && !gesto.movio && calibrando) {
+      const p = aSVG(ev);
+      if (calibrando.puntos.length === 2) calibrando.puntos = [];
+      calibrando.puntos.push({ x: p.x, y: plano().largo - p.y });
+      pintar();
+      if (calibrando.puntos.length === 2) calibrando.alTerminar(...calibrando.puntos);
+      else calibrando.alMarcar?.(calibrando.puntos.length);
     } else if (gesto.tipo === 'mirar' && !gesto.movio) { seleccion = null; pintar(); }
     if (punteros.size === 0) gesto = null;
   }
@@ -239,6 +263,7 @@
     ctx = opciones;
     vista = null;
     seleccion = null;
+    calibrando = null;
     if (soloSector != null && soloSector >= ctx.obra.sectores.length) soloSector = null;
     if (primera) {
       const svg = ctx.svg;
@@ -290,6 +315,11 @@
       ctx.obra.sectores.map((s, k) => `<button type="button" data-filtro="${k}" class="${soloSector === k ? 'activo' : ''}"><i style="background:${colorSector(k)}"></i>${(s.nombre || `Sector ${k + 1}`).replace(/[<>&]/g, '')}</button>`).join('');
   }
 
-  global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, soloSector: () => soloSector,
+  // Modo escalar: los dos próximos toques en el plano marcan A y B; arrastrar sigue moviendo la vista.
+  function calibrar(alMarcar, alTerminar) { calibrando = { puntos: [], alMarcar, alTerminar }; seleccion = null; pintar(); }
+  function dejarDeCalibrar() { calibrando = null; pintar(); }
+
+  global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, soloSector: () => soloSector, calibrar, dejarDeCalibrar,
+    reencuadrar: () => { if (ctx) { ajustar(); pintar(); } },
     coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores()) : null };
 })(typeof window !== 'undefined' ? window : globalThis);

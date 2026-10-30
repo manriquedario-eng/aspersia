@@ -135,6 +135,29 @@
           <label>Ancho <span class="unidad">m</span><input id="plano-ancho" type="number" inputmode="decimal" min="1" step="0.5"></label>
           <label>Largo <span class="unidad">m</span><input id="plano-largo" type="number" inputmode="decimal" min="1" step="0.5"></label>
         </div>
+        <details id="fondo-caja" class="fondo">
+          <summary>Foto o captura del terreno de fondo</summary>
+          <p class="ayuda">En Google Maps poné la vista satélite, acercate al lote y sacá una captura de pantalla. Cargala acá y después escalala con una medida que conozcas (por ejemplo, el frente del lote).</p>
+          <label class="principal ancho archivo">Cargar foto o captura
+            <input id="fondo-archivo" type="file" accept="image/*"></label>
+          <div id="fondo-acciones" hidden>
+            <button id="fondo-escalar" class="principal lleno ancho" type="button">Escalar con una medida</button>
+            <div id="fondo-calibrar" class="calibrar" hidden>
+              <p id="fondo-paso" class="ayuda"></p>
+              <div id="fondo-medida" hidden>
+                <label>Medida real entre A y B <span class="unidad">m</span>
+                  <input id="fondo-metros" type="number" inputmode="decimal" min="0.1" step="0.1"></label>
+                <div class="acciones">
+                  <button id="fondo-aplicar" class="principal lleno" type="button">Aplicar escala</button>
+                  <button id="fondo-cancelar" class="chico" type="button">Cancelar</button>
+                </div>
+              </div>
+            </div>
+            <label>Transparencia de la imagen <input id="fondo-opacidad" type="range" min="20" max="100" step="5"></label>
+            <p id="fondo-estado" class="ayuda"></p>
+            <button id="fondo-quitar" class="chico peligro" type="button">Quitar imagen</button>
+          </div>
+        </details>
         <label class="tilde"><input id="plano-distancias" type="checkbox"> Calcular los caños con las distancias del plano</label>
         <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto.</p>
       </section>

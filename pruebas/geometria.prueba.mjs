@@ -63,6 +63,22 @@ test('distancias del caño desde el plano', () => {
   assert.deepEqual(d, [5, 6, 3]);
 });
 
+test('escala con una medida conocida: todo el plano se agranda junto con la imagen', () => {
+  // En la captura sin escalar, el frente del lote mide 4 "metros"; en la realidad mide 12 m → factor 3
+  const k = G.factorDeEscala({ x: 1, y: 2 }, { x: 5, y: 2 }, 12);
+  assert.equal(k, 3);
+  const plano = { ancho: 10, largo: 6, fuente: { x: 1, y: 1 }, fondo: { ancho: 10, alto: 6 } };
+  const sectores = [{ valvulaPos: { x: 2, y: 1 }, aspersores: [{ x: 4, y: 3, giro: 90 }, { x: 8.5, y: 5.5 }] }];
+  G.escalarPlano(plano, sectores, k);
+  assert.deepEqual([plano.ancho, plano.largo, plano.fondo.ancho, plano.fondo.alto], [30, 18, 30, 18]);
+  assert.deepEqual(plano.fuente, { x: 3, y: 3 });
+  assert.deepEqual(sectores[0].valvulaPos, { x: 6, y: 3 });
+  assert.deepEqual(sectores[0].aspersores.map(a => [a.x, a.y]), [[12, 9], [25.5, 16.5]]);
+  assert.equal(sectores[0].aspersores[0].giro, 90, 'el giro no cambia');
+  assert.throws(() => G.factorDeEscala({ x: 1, y: 1 }, { x: 1, y: 1 }, 5));
+  assert.throws(() => G.factorDeEscala({ x: 0, y: 0 }, { x: 1, y: 1 }, 0));
+});
+
 test('ubicación de arranque: respeta las distancias y no pisa lo ya ubicado', () => {
   const sectores = [
     { aspersores: [{ distancia: 2 }, { distancia: 3.7 }, { x: 9, y: 9, giro: 30, distancia: 3 }] },

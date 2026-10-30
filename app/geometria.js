@@ -75,5 +75,25 @@
     });
   }
 
-  global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion };
+  // Escala del plano a partir de una medida conocida: dos puntos (en los metros actuales del plano) y su largo real.
+  // Devuelve el factor por el que hay que multiplicar todo para que esa distancia mida lo que dice el usuario.
+  function factorDeEscala(a, b, metrosReales) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!(d > 0) || !(metrosReales > 0)) throw new Error('Marcá dos puntos distintos y escribí cuántos metros hay entre ellos.');
+    return metrosReales / d;
+  }
+
+  // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas y aspersores.
+  // Todo se multiplica desde la esquina de abajo a la izquierda, así cada cosa queda sobre el mismo lugar de la imagen.
+  function escalarPlano(plano, sectores, k) {
+    const r1 = v => Math.round(v * 100) / 100;
+    plano.ancho = r1(plano.ancho * k);
+    plano.largo = r1(plano.largo * k);
+    if (plano.fondo) { plano.fondo.ancho *= k; plano.fondo.alto *= k; }
+    const mover = p => { if (p && p.x != null) { p.x = r1(p.x * k); p.y = r1(p.y * k); } };
+    mover(plano.fuente);
+    for (const s of sectores) { mover(s.valvulaPos); s.aspersores.forEach(mover); }
+  }
+
+  global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano };
 })(typeof window !== 'undefined' ? window : globalThis);
