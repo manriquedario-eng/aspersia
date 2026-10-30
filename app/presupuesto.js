@@ -104,8 +104,14 @@
       if (s.valvula) valvulas++;
       const lat = `${s.lateral.material}-${s.lateral.nominal}`;
       const c = canos.get(lat) || { material: s.lateral.material, nominal: s.lateral.nominal, lateral: 0, alimentacion: 0 };
-      c.lateral += s.aspersores.reduce((t, a) => t + (a.distancia || 0), 0);
+      // Con el ramal dibujado en el plano, el caño es el largo dibujado y lleva un codo en cada quiebre.
+      const ramal = s.ramal && s.ramal.length && s.valvulaPos ? [s.valvulaPos, ...s.ramal] : null;
+      c.lateral += ramal ? ramal.slice(1).reduce((t, p, k) => t + Math.hypot(p.x - ramal[k].x, p.y - ramal[k].y), 0)
+        : s.aspersores.reduce((t, a) => t + (a.distancia || 0), 0);
       canos.set(lat, c);
+      if (ramal && ramal.length > 2)
+        sumar(`codo-${s.lateral.material}-${s.lateral.nominal}`, 'Materiales',
+          /^pvc/.test(s.lateral.material) ? `Codo de PVC de ${s.lateral.nominal} mm` : `Codo para caño ${tipoLat.nombre} de ${s.lateral.nominal} mm`, 'u', ramal.length - 2);
       if (s.alimentacion && s.alimentacion.largo > 0) {
         const al = `${s.alimentacion.material}-${s.alimentacion.nominal}`;
         const ca = canos.get(al) || { material: s.alimentacion.material, nominal: s.alimentacion.nominal, lateral: 0, alimentacion: 0 };

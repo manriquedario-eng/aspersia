@@ -358,6 +358,7 @@
       L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
       L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm, con tapón al final. ` +
         `Cada aspersor sale del caño con conector inicial, manguera ${R.MANGUERAS[s.manguera || 'pe-12'].nombre} (hasta 6 m) y espiga en L.`);
+      if (O.tieneRamal(s)) L.push(`Caño principal dibujado en el plano: ${fmt(O.largoRamal(s), 1)} m con ${O.codosRamal(s)} codo(s), por los puntos ${[s.valvulaPos, ...s.ramal].map(p => `(${fmt(p.x, 1)}; ${fmt(p.y, 1)})`).join(' → ')}. La manguera de cada aspersor va en línea recta hasta el caño.`);
       if (c.error) { L.push(`Error de cálculo: ${c.error}`); return; }
       c.r.aspersores.forEach((a, i) => {
         const asp = s.aspersores[i];
@@ -575,17 +576,15 @@
     const campo = n => li.querySelector(`[data-campo=${n}]`);
     a.tipo = opciones(campo('tipo'), TIPOS.map(t => [t, t]), a.tipo);
     a.boquilla = opciones(campo('boquilla'), boquillas(a.tipo).map(b => [b, etiquetaBoquilla(a.tipo, b)]), a.boquilla);
+    // El arco se escribe libre en todas (Darío). Las fijas que no traen ese arco pasan a la ajustable (OBRA.ponerArco).
     const libre = arcoLibre(a);
     const listaArcos = libre ? [] : arcos(a.tipo, a.boquilla);
-    li.querySelector('[data-solo=arco]').hidden = !listaArcos.length;
-    li.querySelector('[data-solo=arco-libre]').hidden = !libre;
-    if (libre) {
-      a.arco = Math.min(360, Math.max(1, Math.round(Number(a.arco) || (esAjustable(a) || esMP(a) ? 180 : 360))));
-      campo('arcoLibre').value = a.arco;
-      campo('arcoLibre').min = esMP(a) ? 90 : 1;
-    } else {
-      a.arco = listaArcos.length ? Number(opciones(campo('arco'), listaArcos.map(x => [x, `${x}°`]), a.arco)) : null;
-    }
+    const conArco = libre || listaArcos.length > 0;
+    li.querySelector('[data-solo=arco-libre]').hidden = !conArco;
+    if (libre) a.arco = Math.min(360, Math.max(1, Math.round(Number(a.arco) || (esAjustable(a) || esMP(a) ? 180 : 360))));
+    else if (conArco && !listaArcos.includes(Number(a.arco))) a.arco = listaArcos.includes(180) ? 180 : listaArcos[0];
+    else a.arco = conArco ? Number(a.arco) : null;
+    if (conArco) campo('arcoLibre').value = a.arco;
     // Con un arco que la boquilla no admite (por ejemplo una MP a 300°) no hay aspersor para calcular:
     // se sigue mostrando la tarjeta y el error aparece en el resultado del sector.
     let e, arcoInvalido = false;
@@ -594,12 +593,15 @@
     li.querySelector('[data-solo=regulador]').hidden = !conCuerpo;
     if (!conCuerpo) a.regulador = '';
     campo('regulador').value = a.regulador || '';
+    // Con el ramal dibujado en el plano, la distancia y la manguera salen de ahí (no se escriben).
+    const ramal = O.tieneRamal(sector());
     campo('distancia').value = a.distancia;
-    campo('distancia').disabled = usaPlano();
+    campo('distancia').disabled = usaPlano() || ramal;
     campo('altura').value = a.altura;
     campo('manguera').value = a.manguera ?? 0;
+    campo('manguera').disabled = ramal;
     li.querySelector('.numero').textContent = i + 1;
-    li.querySelector('[data-texto=distancia]').textContent = (i ? 'Distancia al anterior' : 'Distancia a la válvula') + (usaPlano() ? ' (del plano)' : '');
+    li.querySelector('[data-texto=distancia]').textContent = (i ? 'Caño desde el anterior' : 'Caño desde la válvula') + (usaPlano() || ramal ? ' (del plano)' : '');
     li.querySelector('.resumen').textContent = arcoInvalido ? `${a.tipo} ${a.boquilla}: arco de ${a.arco}° no válido`
       : `${e.tipo} ${e.nombre}${a.tipo === 'Turbina PGP Ultra' ? ` a ${a.arco}°` : ''}`;
   }
@@ -608,15 +610,23 @@
     const n = ev.target.dataset.campo;
     if (!li || !n) return;
     const i = Number(li.dataset.i), a = sector().aspersores[i];
+    if (n === 'arcoLibre') return;   // el arco se toma al terminar de escribirlo (evento change, abajo)
     if (n === 'distancia' || n === 'altura' || n === 'manguera') a[n] = decimal(ev.target.value);
-    else if (n === 'arcoLibre') {
-      const v = decimal(ev.target.value);
-      if (v < 1 || v > 360) return;
-      a.arco = Math.round(v);
-    } else a[n] = ev.target.value;
+    else a[n] = ev.target.value;
     if (n === 'tipo') { a.boquilla = null; a.arco = null; }
-    if (n === 'arco') a.arco = Number(a.arco);
-    if (['tipo', 'boquilla', 'arco', 'regulador', 'arcoLibre'].includes(n)) completarAspersor(li, a, i);
+    if (['tipo', 'boquilla', 'regulador'].includes(n)) completarAspersor(li, a, i);
+    li.querySelector('[data-texto=aviso-arco]').hidden = true;
+    pintarSector();
+  });
+  // Arco escrito a mano: si la boquilla fija no lo trae, pasa a la ajustable del mismo tamaño y avisa.
+  lista.addEventListener('change', ev => {
+    if (ev.target.dataset.campo !== 'arcoLibre') return;
+    const li = ev.target.closest('.aspersor'), i = Number(li.dataset.i), a = sector().aspersores[i];
+    const aviso = li.querySelector('[data-texto=aviso-arco]');
+    try { aviso.textContent = O.ponerArco(a, decimal(ev.target.value)) || ''; }
+    catch (err) { aviso.textContent = err.message; }
+    completarAspersor(li, a, i);
+    aviso.hidden = !aviso.textContent;
     pintarSector();
   });
   lista.addEventListener('click', ev => {
@@ -882,7 +892,7 @@
     ['Cuerpos y turbinas', c => c.startsWith('cuerpo-') || c.startsWith('turbina-')],
     ['Boquillas', c => c.startsWith('boq-')],
     ['Caños', c => c.startsWith('cano-')],
-    ['Manguera y conexiones', c => /^(manguera|conector|espiga|tapon|pegamento|conexion)-/.test(c)],
+    ['Manguera y conexiones', c => /^(manguera|conector|espiga|tapon|codo|pegamento|conexion)-/.test(c)],
     ['Válvulas, caja y programador', c => /^(valvula|caja|programador)/.test(c)],
     ['Bombas', c => c.startsWith('bomba-')],
     ['Conexiones', c => true],

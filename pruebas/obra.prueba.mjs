@@ -238,3 +238,46 @@ test('arco: el que se elige (en Diseño o en el plano) es el que dibuja el plano
   mp.arco = 300;
   assert.deepEqual(arcos(), [90, 45]);
 });
+
+test('grados libres: la fija que no trae ese arco pasa a la ajustable del mismo tamaño; MP y MPR respetan lo de Hunter', () => {
+  const fija = { tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180 };
+  assert.equal(O.ponerArco(fija, 90), null);
+  assert.deepEqual([fija.tipo, fija.boquilla, fija.arco], ['Boquilla Pro fija', '12', 90], 'la 12 viene en 90°: sigue fija');
+  const aviso = O.ponerArco(fija, 45);
+  assert.match(aviso, /12A-HE/);
+  assert.deepEqual([fija.tipo, fija.boquilla, fija.arco], ['Boquilla Pro ajustable', '12A-HE', 45]);
+  assert.ok(R.emisor(O.idEmisor(fija)), 'la ajustable a 45° se puede calcular');
+  const aj = { tipo: 'Boquilla Pro ajustable', boquilla: '8A-HE', arco: 180 };
+  O.ponerArco(aj, 125);
+  assert.equal(aj.arco, 125);
+  assert.throws(() => O.ponerArco({ tipo: 'MP Rotator', boquilla: 'MP2000', arco: 180 }, 300), /MP2000/);
+  assert.throws(() => O.ponerArco({ tipo: 'Turbina PGP Ultra con boquilla MPR', boquilla: 'MPR-30', arco: 90 }, 45), /MPR-30 viene solo/);
+  assert.throws(() => O.ponerArco(aj, 0), /1° a 360°/);
+});
+
+test('ramal dibujado: orden por el caño, tramos, mangueras hasta el caño, codos y metros de caño', () => {
+  const { o } = obraDePrueba();
+  const asp = (x, y) => ({ tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 180, regulador: 'PRS30', distancia: 1, altura: 0, manguera: 1, x, y, giro: 0 });
+  const a9 = asp(9, 6), a3 = asp(3, 1), a6 = asp(6, -2), a2 = asp(2.2, 0.1);
+  // Caño en L: de la válvula (0,0) hasta (10,0) y de ahí hasta (10,10): un codo
+  o.sectores = [{ ...A.sectorNuevo(1), valvulaPos: { x: 0, y: 0 }, ramal: [{ x: 10, y: 0 }, { x: 10, y: 10 }], aspersores: [a9, a3, a6, a2] }];
+  o.plano.distanciasDesdePlano = false;
+  O.sincronizarDistancias(o);
+  const s = o.sectores[0];
+  assert.deepEqual(s.aspersores, [a2, a3, a6, a9], 'en el orden en que los pasa el caño');
+  assert.deepEqual(s.aspersores.map(a => a.distancia), [2.2, 0.8, 3, 10]);
+  assert.deepEqual(s.aspersores.map(a => a.manguera), [0.5, 1, 2, 1], 'pegado al caño: la manguera mínima');
+  assert.equal(O.largoRamal(s), 20);
+  assert.equal(O.codosRamal(s), 1);
+  const pre = O.presupuesto(o, {});
+  const renglon = clave => pre.renglones.find(r => r.clave === clave);
+  assert.equal(renglon('codo-pvc-k6-32').cantidad, 1);
+  assert.equal(renglon('conector-inicial-pe-12').cantidad, 4);
+  assert.equal(renglon('manguera-pe-12').cantidad, Math.ceil(4.5 * 1.1));
+  assert.equal(renglon('cano-pvc-k6-32').cantidad, Math.ceil(20 * 1.1), 'el largo dibujado del ramal');
+  // Sin ramal, el sector sigue como antes
+  delete s.ramal;
+  s.aspersores.forEach(a => { a.distancia = 4; a.manguera = 1; });
+  O.sincronizarDistancias(o);
+  assert.deepEqual(s.aspersores.map(a => a.distancia), [4, 4, 4, 4]);
+});

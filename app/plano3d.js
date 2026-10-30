@@ -185,9 +185,14 @@
       caja.position.set(aX(s.valvulaPos.x), 0.09, aZ(s.valvulaPos.y)); scene.add(caja);
       const tapa = new T.Mesh(new T.BoxGeometry(0.42, 0.02, 0.32), new T.MeshLambertMaterial({ color }));
       tapa.position.set(aX(s.valvulaPos.x), 0.19, aZ(s.valvulaPos.y)); scene.add(tapa);
-      const puntos = [fuente, s.valvulaPos, ...s.aspersores].map(p => new T.Vector3(aX(p.x), 0.03, aZ(p.y)));
+      // Con el ramal dibujado: caño principal hasta el último codo y una manguera recta de cada aspersor al caño
+      const conRamal = s.ramal && s.ramal.length;
+      const v3 = p => new T.Vector3(aX(p.x), 0.03, aZ(p.y));
+      const puntos = (conRamal ? [fuente, s.valvulaPos, ...s.ramal] : [fuente, s.valvulaPos, ...s.aspersores]).map(v3);
       const linea = new T.Line(new T.BufferGeometry().setFromPoints(puntos), new T.LineDashedMaterial({ color, dashSize: 0.4, gapSize: 0.25 }));
       linea.computeLineDistances(); scene.add(linea);
+      if (conRamal) for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, s.aspersores))
+        scene.add(new T.Line(new T.BufferGeometry().setFromPoints([v3(s.aspersores[c.i]), v3(c.punto)]), new T.LineBasicMaterial({ color })));
     });
     const bomba = new T.Mesh(new T.BoxGeometry(0.5, 0.4, 0.4), new T.MeshLambertMaterial({ color: 0x0b4a8f }));
     bomba.position.set(aX(fuente.x), 0.2, aZ(fuente.y)); scene.add(bomba);

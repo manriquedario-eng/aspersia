@@ -12,6 +12,31 @@
   const esMP = a => a.tipo === R().TIPO_MP;
   const arcoLibre = a => esAjustable(a) || esMP(a) || a.tipo === 'Turbina PGP Ultra';
 
+  // Arco que escribe el usuario (Darío: cualquiera de 1° a 360°, en todas las toberas).
+  // Las Pro fijas vienen de fábrica en pocos arcos: si se pide otro, se cambia por la ajustable del mismo tamaño,
+  // que se regula a cualquier arco. Las MP y las MPR tienen el rango que da Hunter: fuera de él, error.
+  // Devuelve un aviso para mostrar (o null) y lanza un error si el arco no se puede usar.
+  const AJUSTABLE_DE = { 5: '6A', 8: '8A-HE', 10: '10A-HE', 12: '12A-HE', 15: '15A-HE', 17: '17A-HE' };
+  const arcosDeFabrica = a => R().emisores().filter(e => e.tipo === a.tipo && e.boquilla === a.boquilla && e.arco != null).map(e => e.arco);
+  function ponerArco(a, valor) {
+    const arco = Math.round(Number(valor));
+    if (!(arco >= 1 && arco <= 360)) throw new Error('El arco va de 1° a 360°.');
+    if (a.tipo === 'MP Rotator de franja') throw new Error('Las MP de franja no llevan arco: riegan una franja.');
+    if (esMP(a)) R().emisor(`mp-${a.boquilla}@${arco}`);   // lanza el error de Hunter si el arco no va
+    if (!arcoLibre(a)) {
+      const trae = arcosDeFabrica(a);
+      if (!trae.includes(arco)) {
+        const aj = a.tipo === 'Boquilla Pro fija' && AJUSTABLE_DE[a.boquilla];
+        if (!aj) throw new Error(`La ${a.boquilla} viene solo en ${trae.join(', ')}°.`);
+        const antes = a.boquilla;
+        Object.assign(a, { tipo: R().TIPO_AJUSTABLE, boquilla: aj, arco });
+        return `La boquilla fija ${antes} no viene en ${arco}°: se cambió por la ajustable ${aj}, que se regula a cualquier arco.`;
+      }
+    }
+    a.arco = arco;
+    return null;
+  }
+
   // Id del aspersor para el cálculo a partir de lo que se eligió en pantalla (tipo, boquilla y arco).
   function idEmisor(a) {
     if (esAjustable(a)) return `pro-${a.boquilla}@${a.arco}`;
@@ -37,15 +62,37 @@
     } catch (err) { return { error: err.message }; }
   }
 
+  // Un sector con el ramal dibujado en el plano: los aspersores quedan en el orden en que los pasa el caño,
+  // la distancia de cada uno es el tramo de caño desde la conexión anterior y la manguera, la recta hasta el caño.
+  const MANGUERA_MINIMA = 0.5;   // aunque el aspersor esté pegado al caño, siempre lleva un poco de manguera
+  const tieneRamal = s => !!(s.ramal && s.ramal.length && s.valvulaPos);
+  function aplicarRamal(s) {
+    const G = global.GEOMETRIA;
+    if (s.aspersores.some(a => a.x == null)) return;
+    const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, s.aspersores);
+    const ordenados = con.map(c => s.aspersores[c.i]);
+    con.forEach((c, k) => {
+      ordenados[k].distancia = r1(c.tramo);
+      ordenados[k].manguera = Math.max(MANGUERA_MINIMA, r1(c.manguera));
+    });
+    s.aspersores.splice(0, s.aspersores.length, ...ordenados);   // mismo arreglo: lo que lo tenga a mano lo sigue viendo
+  }
+  const largoRamal = s => tieneRamal(s) ? global.GEOMETRIA.largoDeLinea([s.valvulaPos, ...s.ramal]) : null;
+  const codosRamal = s => tieneRamal(s) ? s.ramal.length - 1 : 0;
+
   // Con "calcular los caños con las distancias del plano", las distancias entre aspersores y el largo hasta
-  // cada válvula salen de las posiciones. Se llama antes de cualquier cálculo, así todo usa los mismos metros.
+  // cada válvula salen de las posiciones. Un sector con ramal dibujado sale siempre del plano (orden, tramos y mangueras).
+  // Se llama antes de cualquier cálculo, así todo usa los mismos metros.
   function sincronizarDistancias(obra) {
-    if (!obra.plano || !obra.plano.distanciasDesdePlano) return;
+    if (!obra.plano) return;
+    const desdePlano = obra.plano.distanciasDesdePlano;
+    if (!desdePlano && !obra.sectores.some(tieneRamal)) return;
     global.GEOMETRIA.ubicarSinPosicion(obra.plano, obra.sectores);
     const f = obra.plano.fuente;
     for (const s of obra.sectores) {
-      global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => s.aspersores[i].distancia = d);
-      s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
+      if (tieneRamal(s)) aplicarRamal(s);
+      else if (desdePlano) global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => s.aspersores[i].distancia = d);
+      if (desdePlano) s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
     }
   }
 
@@ -85,5 +132,5 @@
     return lista;
   }
 
-  global.OBRA = { esAjustable, esMP, arcoLibre, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

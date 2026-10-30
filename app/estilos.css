@@ -357,3 +357,9 @@ ol.pasos li { margin: 4px 0; }
 .capas { margin-top: 10px; }
 /* Opción elegida en los botones del panel del plano (arco, altura) */
 .giros .chico.activo { border-color: var(--primario); background: var(--primario-claro); color: var(--primario); font-weight: 700; }
+/* Aviso al cambiar el arco (por ejemplo, una fija que pasa a ajustable) */
+.aviso-arco { background: var(--aviso-fondo); color: var(--aviso); border-radius: 8px; padding: 6px 10px; margin: 0; }
+/* Caño principal (ramal), mangueras y codos en el plano */
+.plano .codo { fill: #fff; }
+.plano .pieza.elegida .codo { fill: var(--agua); }
+.plano .manguera { stroke-opacity: .9; }

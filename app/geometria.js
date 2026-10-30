@@ -59,6 +59,38 @@
     });
   }
 
+  // ---------- Ramal: el caño principal de un sector ----------
+  // Sale de la válvula y pasa por los codos que se marcan en el plano. Cada aspersor se conecta con una manguera
+  // en línea recta hasta el punto más cercano del ramal: ahí se pincha el caño y va el conector inicial.
+  const largoDeLinea = linea => linea.slice(1).reduce((t, p, i) => t + Math.hypot(p.x - linea[i].x, p.y - linea[i].y), 0);
+
+  // Punto de la línea más cercano a p: { punto, distancia (de p a la línea), recorrido (metros desde el inicio de la línea) }.
+  function puntoMasCercano(linea, p) {
+    let mejor = null, recorrido = 0;
+    for (let i = 0; i < linea.length - 1; i++) {
+      const a = linea[i], b = linea[i + 1], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy, L = Math.sqrt(L2);
+      const t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0;
+      const q = { x: a.x + t * dx, y: a.y + t * dy }, d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (!mejor || d < mejor.distancia - 1e-9) mejor = { punto: q, distancia: d, recorrido: recorrido + t * L };
+      recorrido += L;
+    }
+    return mejor;
+  }
+
+  // Conexión de cada aspersor al ramal, en el orden en que los va pasando el caño desde la válvula:
+  // [{ i (índice del aspersor), punto, manguera (m), tramo (m de caño desde la conexión anterior o la válvula) }].
+  function conexionesAlRamal(valvula, ramal, aspersores) {
+    const linea = [valvula, ...ramal];
+    let anterior = 0;
+    return aspersores.map((a, i) => ({ i, ...puntoMasCercano(linea, a) }))
+      .sort((x, y) => x.recorrido - y.recorrido || x.i - y.i)
+      .map(c => {
+        const tramo = c.recorrido - anterior;
+        anterior = c.recorrido;
+        return { i: c.i, punto: c.punto, manguera: c.distancia, tramo };
+      });
+  }
+
   // Ubicación de arranque para los aspersores que todavía no están en el plano:
   // cada sector en una fila, separados según las distancias que ya tenían cargadas.
   function ubicarSinPosicion(terreno, sectores) {
@@ -92,8 +124,9 @@
     if (plano.fondo) { plano.fondo.ancho *= k; plano.fondo.alto *= k; }
     const mover = p => { if (p && p.x != null) { p.x = r1(p.x * k); p.y = r1(p.y * k); } };
     mover(plano.fuente);
-    for (const s of sectores) { mover(s.valvulaPos); s.aspersores.forEach(mover); }
+    for (const s of sectores) { mover(s.valvulaPos); s.aspersores.forEach(mover); (s.ramal || []).forEach(mover); }
   }
 
-  global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano };
+  global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
+    largoDeLinea, puntoMasCercano, conexionesAlRamal };
 })(typeof window !== 'undefined' ? window : globalThis);
