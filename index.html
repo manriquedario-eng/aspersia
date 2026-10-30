@@ -166,6 +166,32 @@
         <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto.</p>
       </section>
 
+      <section class="tarjeta">
+        <h2>Sol y sombra</h2>
+        <p class="ayuda arriba">Para ver qué partes del jardín tienen más sol. Tocá qué querés marcar y después tocá sobre el plano.</p>
+        <div class="botones-sombra">
+          <button type="button" class="boton" data-marcar="casa">+ Casa</button>
+          <button type="button" class="boton" data-marcar="muro">+ Muro</button>
+          <button type="button" class="boton" data-marcar="arbol">+ Árbol</button>
+        </div>
+        <div id="sombra-marcar" class="calibrar" hidden>
+          <p id="sombra-paso" class="ayuda"></p>
+          <button id="sombra-cancelar" class="chico" type="button">Cancelar</button>
+        </div>
+        <p class="etiqueta-campo">Época del año</p>
+        <div id="sol-epoca" class="filtro"></div>
+        <details class="fondo">
+          <summary>Norte y ubicación de la obra</summary>
+          <label>Hacia dónde está el norte <span class="unidad" id="sol-norte-valor"></span>
+            <input id="sol-norte" type="range" min="0" max="355" step="5"></label>
+          <p class="ayuda">0° = el norte está arriba del plano. Las capturas de Google Maps ya vienen así (si giraste el mapa, tocá la brújula de Google Maps antes de la captura).</p>
+          <label>Latitud <span class="unidad">° (negativa al sur)</span>
+            <input id="sol-latitud" type="number" inputmode="decimal" step="0.1" min="-60" max="60"></label>
+          <button id="sol-gps" class="chico" type="button">Usar la ubicación del teléfono</button>
+          <p id="sol-gps-resultado" class="ayuda"></p>
+        </details>
+      </section>
+
       <section class="tarjeta plano-tarjeta">
         <div class="modo-plano" role="tablist">
           <button type="button" data-modo="2d" aria-selected="true">Plano 2D</button>
@@ -182,15 +208,20 @@
         </div>
         <div id="plano-2d-caja" class="plano-caja">
           <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
+          <div class="rosa" aria-label="Norte"><svg viewBox="-20 -20 40 40" id="plano-rosa"><polygon points="0,-15 5,0 -5,0" class="rosa-n"/><polygon points="0,15 5,0 -5,0" class="rosa-s"/><text x="0" y="-16.5">N</text></svg></div>
           <div id="plano-botones" class="plano-botones">
             <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
             <button type="button" data-zoom="menos" aria-label="Alejar">−</button>
             <button type="button" data-zoom="ajustar" aria-label="Ver todo el terreno">⤢</button>
           </div>
         </div>
-        <label class="tilde"><input id="plano-cobertura" type="checkbox"> Ver cobertura</label>
+        <div id="plano-capa" class="filtro capas">
+          <button type="button" data-capa="agua">Cobertura de agua</button>
+          <button type="button" data-capa="sol">Sol y sombra</button>
+          <button type="button" data-capa="nada">Solo el plano</button>
+        </div>
         <div id="plano-estadisticas" class="estadisticas"></div>
-        <p class="ayuda leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
+        <p class="ayuda leyenda" id="plano-leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
       </section>
 
       <section class="tarjeta" id="plano-seleccion"></section>
@@ -376,6 +407,7 @@
 <script src="app/presupuesto.js"></script>
 <script src="app/almacen.js"></script>
 <script src="app/geometria.js"></script>
+<script src="app/sol.js"></script>
 <script src="app/plano.js"></script>
 <script src="app/plano3d.js"></script>
 <script src="app/obra.js"></script>

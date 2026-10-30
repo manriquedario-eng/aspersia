@@ -70,6 +70,10 @@
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
       o.plano ||= planoNuevo();
+      o.plano.sombras ??= [];        // casas, muros y árboles que hacen sombra
+      o.plano.norte ??= 0;           // rumbo del norte en el plano (0 = arriba, como Google Maps)
+      o.plano.epoca ??= 'verano';
+      o.plano.verSol ??= false;
       for (const s of o.sectores) {
         s.superficie ??= 0;
         // Obras de antes de la manguera: se agrega el tipo, pero cada aspersor queda con 0 m (como estaba calculado).
