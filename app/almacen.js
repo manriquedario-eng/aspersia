@@ -70,10 +70,10 @@
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
       o.plano ||= planoNuevo();
-      o.plano.sombras ??= [];        // casas, muros y árboles que hacen sombra
       o.plano.norte ??= 0;           // rumbo del norte en el plano (0 = arriba, como Google Maps)
-      o.plano.epoca ??= 'verano';
-      o.plano.verSol ??= false;
+      o.plano.verSol ??= false;      // degradé del lado del sol
+      // Se sacó marcar casas, muros y árboles (30-oct-2026): se borra lo que haya quedado guardado.
+      delete o.plano.sombras; delete o.plano.epoca; delete o.plano.latitud;
       for (const s of o.sectores) {
         s.superficie ??= 0;
         // Obras de antes de la manguera: se agrega el tipo, pero cada aspersor queda con 0 m (como estaba calculado).

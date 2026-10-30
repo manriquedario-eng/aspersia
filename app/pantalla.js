@@ -194,7 +194,7 @@
       terreno: obra.plano, aspersores: asps, fuente: obra.plano.fuente,
       sectores: obra.sectores.map((s, k) => ({ ...s, visible: solo == null || k === solo })),
       colorSector: PLANO.colorSector, conCobertura: obra.plano.verCobertura,
-      mapaSol: obra.plano.verSol ? PLANO.mapaSol() : null, sombras: obra.plano.sombras,
+      degradeSol: obra.plano.verSol ? SOL.degradeSol(obra.plano, obra.plano.norte || 0) : null,
     }).catch(err => { $('plano-3d').innerHTML = `<p class="ayuda">${escapar(err.message)}</p>`; });
   }
   document.querySelectorAll('[data-modo]').forEach(b => b.addEventListener('click', () => cambiarModoPlano(b.dataset.modo)));
@@ -209,10 +209,7 @@
     $('plano-ancho').value = obra.plano.ancho;
     $('plano-largo').value = obra.plano.largo;
     $('plano-distancias').checked = usaPlano();
-    obra.plano.latitud ??= datos.latitud ?? LATITUD_INICIAL;
     pintarSol();
-    // Sol y sombra es opcional: la tarjeta queda cerrada hasta que se use.
-    $('sol-caja').open = obra.plano.sombras.length > 0 || obra.plano.verSol;
     pintarFondo();
     guardar();
     PLANO.iniciar(planoActual());
@@ -320,7 +317,7 @@
   $('plano-ancho').addEventListener('change', ev => medidaTerreno('ancho', ev.target.value));
   $('plano-largo').addEventListener('change', ev => medidaTerreno('largo', ev.target.value));
   $('plano-distancias').addEventListener('change', ev => { obra.plano.distanciasDesdePlano = ev.target.checked; sincronizarDistancias(); guardar(); PLANO.pintar(); });
-  // Qué se pinta sobre el terreno: cobertura de agua, sol y sombra, o nada.
+  // Qué se pinta sobre el terreno: cobertura de agua, lado del sol, o nada.
   const capaActual = () => obra.plano.verSol ? 'sol' : obra.plano.verCobertura ? 'agua' : 'nada';
   function elegirCapa(capa) {
     obra.plano.verSol = capa === 'sol';
@@ -330,79 +327,18 @@
   }
   $('plano-capa').addEventListener('click', ev => { const b = ev.target.closest('[data-capa]'); if (b) elegirCapa(b.dataset.capa); });
 
-  // ---------- Sol y sombra ----------
-  const LATITUD_INICIAL = -34.6;   // Buenos Aires, mientras no se use la ubicación del teléfono
+  // ---------- Norte (para el lado del sol) ----------
   function pintarSol() {
     const p = obra.plano;
     document.querySelectorAll('#plano-capa [data-capa]').forEach(b => b.classList.toggle('activo', b.dataset.capa === capaActual()));
-    $('sol-epoca').innerHTML = Object.entries(SOL.EPOCAS).map(([k, t]) => `<button type="button" data-epoca="${k}" class="${p.epoca === k ? 'activo' : ''}">${t}</button>`).join('');
     $('sol-norte').value = p.norte || 0;
     $('sol-norte-valor').textContent = `${p.norte || 0}°`;
-    $('sol-latitud').value = p.latitud;
   }
-  $('sol-epoca').addEventListener('click', ev => {
-    const b = ev.target.closest('[data-epoca]');
-    if (!b) return;
-    obra.plano.epoca = b.dataset.epoca;
-    if (capaActual() !== 'sol') return elegirCapa('sol');
-    guardar(); pintarSol();
-    if (modoPlano === '3d') abrir3D(); else PLANO.pintar();
-  });
   $('sol-norte').addEventListener('input', ev => {
     obra.plano.norte = Number(ev.target.value);
     $('sol-norte-valor').textContent = `${obra.plano.norte}°`;
     guardar(); PLANO.pintar();
   });
-  $('sol-latitud').addEventListener('change', ev => {
-    const v = decimal(ev.target.value);
-    if (!v || Math.abs(v) > 66) return pintarSol();
-    obra.plano.latitud = datos.latitud = Math.round(v * 100) / 100;
-    guardar(); PLANO.pintar();
-  });
-  $('sol-gps').addEventListener('click', () => {
-    const res = $('sol-gps-resultado');
-    if (!navigator.geolocation) { res.textContent = 'Este teléfono no da la ubicación.'; return; }
-    res.textContent = 'Buscando la ubicación…';
-    navigator.geolocation.getCurrentPosition(pos => {
-      obra.plano.latitud = datos.latitud = Math.round(pos.coords.latitude * 100) / 100;
-      res.textContent = `Listo: latitud ${fmt(obra.plano.latitud, 2)}°. Queda guardada también para las obras nuevas.`;
-      guardar(); pintarSol(); PLANO.pintar();
-    }, () => { res.textContent = `No se pudo saber la ubicación. Revisá que ${EQUIPO === 'android' ? 'Chrome' : 'el navegador'} tenga permiso de ubicación o escribí la latitud.`; },
-    { enableHighAccuracy: false, timeout: 15000, maximumAge: 3600000 });
-  });
-
-  // Marcar lo que hace sombra: casa con 3 toques, muro con 2, árbol con 1.
-  const MARCAR = {
-    casa: { n: 3, etiquetas: ['1', '2', '3'], pasos: ['Tocá una esquina de la casa.', 'Tocá la esquina de al lado, sobre el mismo lado de la casa.', 'Tocá cualquier punto del lado de enfrente.'] },
-    muro: { n: 2, etiquetas: ['1', '2'], pasos: ['Tocá una punta del muro.', 'Tocá la otra punta.'] },
-    arbol: { n: 1, etiquetas: ['1'], pasos: ['Tocá el centro del árbol.'] },
-  };
-  function empezarMarcar(tipo) {
-    if (modoPlano === '3d') cambiarModoPlano('2d');
-    const m = MARCAR[tipo];
-    $('sombra-marcar').hidden = false;
-    $('sombra-paso').textContent = m.pasos[0];
-    PLANO.marcar({ n: m.n, etiquetas: m.etiquetas,
-      alMarcar: n => { $('sombra-paso').textContent = m.pasos[n]; },
-      alTerminar: (...pts) => {
-        const [alto] = SOL.TIPOS[tipo].alturas[0];
-        let o;
-        try {
-          if (tipo === 'casa') o = { tipo, puntos: SOL.rectanguloDeTresPuntos(...pts), altura: alto };
-          else if (tipo === 'muro') o = { tipo, puntos: pts.map(p => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 })), altura: alto };
-          else o = { tipo, x: Math.round(pts[0].x * 100) / 100, y: Math.round(pts[0].y * 100) / 100, radio: SOL.COPA[alto], altura: alto };
-        } catch (err) { $('sombra-paso').textContent = `${err.message} Empezá de nuevo: ${m.pasos[0].toLowerCase()}`; return; }
-        obra.plano.sombras.push(o);
-        $('sombra-marcar').hidden = true;
-        PLANO.dejarDeMarcar();
-        if (capaActual() !== 'sol') { obra.plano.verSol = true; obra.plano.verCobertura = false; pintarSol(); }
-        guardar();
-        PLANO.elegirSombra(obra.plano.sombras.length - 1);
-      } });
-    $('plano-svg').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-  document.querySelectorAll('[data-marcar]').forEach(b => b.addEventListener('click', () => empezarMarcar(b.dataset.marcar)));
-  $('sombra-cancelar').addEventListener('click', () => { $('sombra-marcar').hidden = true; PLANO.dejarDeMarcar(); });
 
   // =====================================================================
   // Consultar a Claude: resumen técnico para pegar en la app de Claude
@@ -436,14 +372,8 @@
       const cob = GEO.cobertura(obra.plano, aspersoresDelPlano());
       L.push('');
       L.push(`COBERTURA DEL PLANO (todos los sectores): ${fmt(cob.seco, 0)} % seco, ${fmt(cob.uno, 0)} % con un solo aspersor, ${fmt(cob.bien, 0)} % bien cubierto.`);
-      if (obra.plano.sombras?.length) {
-        const p = obra.plano, opc = { latitud: p.latitud ?? LATITUD_INICIAL, norte: p.norte || 0, epoca: p.epoca || 'verano' };
-        const m = SOL.mapa(p, p.sombras, opc);
-        L.push(`SOL Y SOMBRA (${SOL.EPOCAS[opc.epoca].toLowerCase()}, latitud ${fmt(opc.latitud, 1)}°, el norte del plano a ${opc.norte}° de arriba): ${fmt(m.sol, 0)} % sol pleno (6 h o más), ${fmt(m.media, 0)} % media sombra, ${fmt(m.sombra, 0)} % sombra (menos de 3 h).`);
-        L.push('Lo que hace sombra: ' + p.sombras.map(o => `${SOL.TIPOS[o.tipo].nombre.toLowerCase()} de ${fmt(o.altura, 1)} m`).join(', ') + '.');
-        for (const x of SOL.porSector(m, p, aspersoresDelPlano(), GEO.riega))
-          L.push(`  ${obra.sectores[x.s].nombre}: ${fmt(x.sol, 0)} % sol pleno, ${fmt(x.media, 0)} % media sombra, ${fmt(x.sombra, 0)} % sombra${x.mezcla ? ' (mezcla sol y sombra)' : ''}.`);
-      }
+      const norte = obra.plano.norte || 0;
+      L.push(`ORIENTACIÓN: el norte está hacia ${SOL.ladoDelPlano(norte)} del plano (las posiciones x, y son en metros: x hacia la derecha, y hacia arriba). El lado de ${SOL.ladoDelPlano(norte)} recibe más sol.`);
     }
     L.push('');
     L.push('Datos calculados con Aspersia (catálogo Hunter 2026, curvas Czerweny, pérdidas por Hazen-Williams).');

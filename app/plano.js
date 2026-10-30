@@ -1,4 +1,4 @@
-// Plano de la obra: terreno, aspersores con su abanico real, válvulas, fuente, caños, cobertura y sol y sombra.
+// Plano de la obra: terreno, aspersores con su abanico real, válvulas, fuente, caños, cobertura y lado del sol.
 // Se arrastra con el dedo (aspersores, válvulas y fuente), se gira tocando un aspersor y se hace zoom con dos dedos.
 // Dibuja en SVG con coordenadas en metros. Usa GEOMETRIA (app/geometria.js) y SOL (app/sol.js).
 
@@ -11,11 +11,11 @@
 
   let ctx = null;        // { obra, aspersores(), alCambiar(), contenedor, ... }
   let vista = null;      // viewBox actual { x, y, w, h } en metros (y del SVG, hacia abajo)
-  let seleccion = null;  // { tipo: 'asp'|'valvula'|'fuente'|'sombra', s, i }
+  let seleccion = null;  // { tipo: 'asp'|'valvula'|'fuente', s, i }
   let soloSector = null; // índice de sector a mostrar, o null para todos
   let cuadro = 0;
   let marcando = null;   // { n, etiquetas, puntos: [{x, y}], alMarcar(n), alTerminar(...puntos) } mientras se marcan puntos con toques
-  let solGuardado = null; // { clave, mapa }: el mapa de sol no depende de los aspersores; se recalcula solo si cambia algo suyo
+
 
   const plano = () => ctx.obra.plano;
   const Y = y => plano().largo - y;          // del plano (y hacia arriba) al SVG (y hacia abajo)
@@ -57,30 +57,6 @@
     return lienzo.toDataURL();
   }
 
-  // Mapa de sol como imagen: amarillo sol pleno, gris claro media sombra, gris oscuro sombra (el techo lo tapa la casa).
-  // Amarillo y grises para no confundirse con los colores de los sectores.
-  function imagenSol(m) {
-    const lienzo = document.createElement('canvas');
-    lienzo.width = m.nx; lienzo.height = m.ny;
-    const g = lienzo.getContext('2d');
-    const img = g.createImageData(m.nx, m.ny);
-    for (let j = 0; j < m.ny; j++) for (let i = 0; i < m.nx; i++) {
-      const h = m.horas[j * m.nx + i];
-      const k = ((m.ny - 1 - j) * m.nx + i) * 4;
-      const [r, gr, b, al] = h < 0 ? [0, 0, 0, 0] : h >= 6 ? [253, 224, 71, 120] : h >= 3 ? [203, 213, 225, 150] : [51, 65, 85, 150];
-      img.data[k] = r; img.data[k + 1] = gr; img.data[k + 2] = b; img.data[k + 3] = al;
-    }
-    g.putImageData(img, 0, 0);
-    return lienzo.toDataURL();
-  }
-  function mapaSol() {
-    const t = plano();
-    const opciones = { latitud: t.latitud ?? -34.6, norte: t.norte || 0, epoca: t.epoca || 'verano' };
-    const clave = JSON.stringify([t.ancho, t.largo, t.sombras, opciones]);
-    if (solGuardado?.clave !== clave) solGuardado = { clave, mapa: S.mapa(t, t.sombras || [], opciones) };
-    return solGuardado.mapa;
-  }
-
   function visibles() {
     return ctx.aspersores().filter(a => soloSector == null || a.s === soloSector);
   }
@@ -108,32 +84,19 @@
       cob = G.cobertura(t, asps, Math.max(0.1, Math.min(0.25, Math.max(t.ancho, t.largo) / 240)));
       el('image', { href: imagenCobertura(cob), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: t.fondo ? 'cobertura sobre-fondo' : 'cobertura' }, svg);
     }
-    // Sol y sombra
-    let sol = null;
+    // Sol: degradé suave del lado norte (más sol) al lado sur (menos sol), según hacia dónde está el norte
     if (t.verSol) {
-      sol = mapaSol();
-      el('image', { href: imagenSol(sol), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: t.fondo ? 'cobertura sobre-fondo' : 'cobertura' }, svg);
+      const d = S.degradeSol(t, t.norte || 0);
+      const grad = el('linearGradient', { id: 'degrade-sol', gradientUnits: 'userSpaceOnUse', x1: d.norte.x, y1: Y(d.norte.y), x2: d.sur.x, y2: Y(d.sur.y) }, el('defs', {}, svg));
+      el('stop', { offset: 0, 'stop-color': '#facc15', 'stop-opacity': 0.5 }, grad);
+      el('stop', { offset: 1, 'stop-color': '#94a3b8', 'stop-opacity': 0.35 }, grad);
+      el('rect', { x: 0, y: 0, width: t.ancho, height: t.largo, fill: 'url(#degrade-sol)', class: 'capa-sol' }, svg);
     }
-    // Lo que hace sombra: casas, muros y árboles
-    const capaSombras = el('g', { class: 'sombras' }, svg);
-    (t.sombras || []).forEach((o, k) => {
-      const g = el('g', { 'data-sombra': k, class: `sombra-obj ${o.tipo} ${seleccion?.tipo === 'sombra' && seleccion.i === k ? 'elegida' : ''}` }, capaSombras);
-      let cx = o.x, cy = o.y;
-      if (o.tipo === 'arbol') el('circle', { cx: o.x, cy: Y(o.y), r: o.radio, 'stroke-width': 1.5 * escala }, g);
-      else {
-        const pol = S.huella(o).poligono;
-        el('polygon', { points: pol.map(p => `${p.x},${Y(p.y)}`).join(' '), 'stroke-width': 1.5 * escala }, g);
-        cx = pol.reduce((a, p) => a + p.x, 0) / pol.length; cy = pol.reduce((a, p) => a + p.y, 0) / pol.length;
-      }
-      const txt = el('text', { x: cx, y: Y(cy) + 4 * escala, 'font-size': 11 * escala, 'stroke-width': 3 * escala, class: 'texto-sombra' }, g);
-      txt.textContent = `${String(o.altura).replace('.', ',')} m`;
-    });
     // Abanicos
     const abanicos = el('g', {}, svg);
     for (const a of asps) {
       const [tag, attrs] = forma(a);
-      if (t.verSol) el(tag, { ...attrs, fill: 'none', stroke: colorSector(a.s), 'stroke-width': 2 * escala, 'stroke-dasharray': `${5 * escala} ${3 * escala}`, 'stroke-opacity': 0.95 }, abanicos);
-      else el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
+      el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
     }
     // Caños: fuente → válvula → aspersores, en orden
     const sectores = ctx.obra.sectores;
@@ -155,7 +118,7 @@
       el('circle', { cx: s.valvulaPos.x, cy: Y(s.valvulaPos.y), r: rf * 2.2, class: 'tocar' }, v);
       el('rect', { x: s.valvulaPos.x - rf * 0.8, y: Y(s.valvulaPos.y) - rf * 0.8, width: rf * 1.6, height: rf * 1.6, fill: colorSector(k), class: 'valvula' }, v);
     });
-    // Puntos marcados con toques (para escalar o para marcar lo que hace sombra)
+    // Puntos marcados con toques (para escalar con una medida conocida)
     svg.classList.toggle('calibrando', !!marcando);
     if (marcando) {
       const rc = 6 * escala;
@@ -176,30 +139,18 @@
       txt.textContent = a.i + 1;
     }
     if (ctx.rosa) ctx.rosa.style.transform = `rotate(${t.norte || 0}deg)`;
-    pintarDatos(cob, sol, asps);
+    pintarDatos(cob, t.verSol);
   }
 
   const pct = v => `<b>${v.toFixed(0)} %</b>`;
-  function pintarDatos(cob, sol, asps) {
+  function pintarDatos(cob, sol) {
     const t = plano();
     let html = '';
     if (cob) html = `<span class="dato seco">${pct(cob.seco)} seco</span><span class="dato uno">${pct(cob.uno)} un solo aspersor</span><span class="dato bien">${pct(cob.bien)} bien cubierto</span>`;
-    if (sol) {
-      const epoca = S.EPOCAS[t.epoca || 'verano'].toLowerCase();
-      html = `<span class="dato sol">${pct(sol.sol)} sol pleno</span><span class="dato media">${pct(sol.media)} media sombra</span><span class="dato sombra">${pct(sol.sombra)} sombra</span>`;
-      html += `<p class="ayuda">En ${epoca}, el sol pega unas ${String(sol.luz).replace('.', ',')} h por día. Sol pleno: 6 h o más de sol directo; sombra: menos de 3 h.`;
-      if (!(t.sombras || []).length) html += ' Marcá la casa, los muros y los árboles para ver dónde hay sombra.';
-      html += '</p>';
-      for (const p of S.porSector(sol, t, asps, G.riega)) {
-        const nombre = (ctx.obra.sectores[p.s].nombre || `Sector ${p.s + 1}`).replace(/[<>&]/g, '');
-        html += p.mezcla
-          ? `<p class="aviso-sol">⚠ <b>${nombre}</b>: ${pct(p.sol)} al sol y ${pct(p.sombra)} a la sombra. Conviene separar la parte al sol y la parte a la sombra en sectores distintos: la del sol necesita más riego.</p>`
-          : `<p class="ayuda sector-sol"><i style="background:${colorSector(p.s)}"></i>${nombre}: ${p.sol.toFixed(0)} % sol pleno, ${p.media.toFixed(0)} % media sombra, ${p.sombra.toFixed(0)} % sombra.</p>`;
-      }
-    }
+    if (sol) html = `<p class="ayuda">El sol pasa por el norte: el lado de ${S.ladoDelPlano(t.norte || 0)} del plano recibe más sol y el de ${S.ladoDelPlano((t.norte || 0) + 180)}, menos. Es orientativo: lo que queda justo al sur de una casa, un muro o un árbol tiene más sombra.</p>`;
     ctx.estadisticas.innerHTML = html;
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol
-      ? '<i class="sol"></i> sol pleno <i class="media"></i> media sombra <i class="sombra"></i> sombra · línea cortada: lo que riega cada aspersor · ▲ fuente · ■ válvula'
+      ? '<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ▲ fuente · ■ válvula'
       : '<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula';
     pintarSeleccion();
   }
@@ -208,14 +159,6 @@
   function pintarSeleccion() {
     const caja = ctx.seleccion;
     if (!seleccion) { caja.innerHTML = '<p class="ayuda">Tocá un aspersor para girarlo o ponerle la posición exacta. Arrastrá para moverlo; con dos dedos, zoom.</p>'; return; }
-    if (seleccion.tipo === 'sombra') {
-      const o = plano().sombras[seleccion.i], tipo = S.TIPOS[o.tipo];
-      caja.innerHTML = `<p class="sel-titulo">${tipo.nombre} · ${String(o.altura).replace('.', ',')} m de alto</p>
-        <div class="giros">${tipo.alturas.map(([h, txt]) => `<button type="button" class="chico ${o.altura === h ? 'activo' : ''}" data-altura="${h}">${txt}</button>`).join('')}</div>
-        <p class="ayuda">Arrastralo para acomodarlo. Si la altura no es exacta, no importa: alcanza con una idea.</p>
-        <button type="button" class="chico peligro" data-quitar-sombra>Quitar</button>`;
-      return;
-    }
     const obj = objeto(seleccion);
     let titulo = 'Fuente de agua (bomba o llave)';
     let giro = '';
@@ -295,18 +238,11 @@
     }
     const pieza = marcando ? null : ev.target.closest('[data-mover]');   // al marcar puntos, un toque marca un punto
     const p = aSVG(ev);
-    // Lo que hace sombra: un toque lo elige; ya elegido, se arrastra (así una casa grande no traba mover la vista).
-    const somb = marcando || pieza ? null : ev.target.closest('[data-sombra]');
-    const k = somb ? Number(somb.dataset.sombra) : null;
-    if (somb && seleccion?.tipo === 'sombra' && seleccion.i === k) {
-      gesto = { tipo: 'moverSombra', k, p0: { x: p.x, y: plano().largo - p.y }, orig: structuredClone(plano().sombras[k]), x0: ev.clientX, y0: ev.clientY, movio: false };
-      return;
-    }
     if (pieza) {
       const sel = { tipo: pieza.dataset.mover, s: Number(pieza.dataset.s), i: Number(pieza.dataset.i) };
       const obj = objeto(sel);
       gesto = { tipo: 'mover', sel, dx: obj.x - p.x, dy: obj.y - (plano().largo - p.y), x0: ev.clientX, y0: ev.clientY, movio: false };
-    } else gesto = { tipo: 'mirar', x0: ev.clientX, y0: ev.clientY, vista: { ...vista }, movio: false, sombra: k };
+    } else gesto = { tipo: 'mirar', x0: ev.clientX, y0: ev.clientY, vista: { ...vista }, movio: false };
   }
   function alMover(ev) {
     if (!punteros.has(ev.pointerId) || !gesto) return;
@@ -327,14 +263,6 @@
       vista = { ...gesto.vista, x: gesto.vista.x - mx * porPixel, y: gesto.vista.y - my * porPixel };
       return repintar();
     }
-    if (gesto.tipo === 'moverSombra') {
-      const p = aSVG(ev), t = plano(), o = t.sombras[gesto.k], v = gesto.orig;
-      const dx = p.x - gesto.p0.x, dy = (t.largo - p.y) - gesto.p0.y;
-      const r2 = n => Math.round(n * 100) / 100;
-      if (v.puntos) o.puntos = v.puntos.map(q => ({ x: r2(q.x + dx), y: r2(q.y + dy) }));
-      else { o.x = r2(v.x + dx); o.y = r2(v.y + dy); }
-      return repintar();
-    }
     if (gesto.tipo === 'mover') {
       const p = aSVG(ev), t = plano();
       const obj = objeto(gesto.sel);
@@ -351,9 +279,6 @@
       if (!gesto.movio) seleccion = gesto.sel;
       ctx.alCambiar(gesto.movio);
       pintar();
-    } else if (gesto.tipo === 'moverSombra') {
-      if (gesto.movio) ctx.alCambiar(false);
-      pintar();
     } else if (gesto.tipo === 'mirar' && !gesto.movio && marcando) {
       const p = aSVG(ev), m = marcando;
       if (m.puntos.length === m.n) m.puntos = [];
@@ -361,10 +286,7 @@
       pintar();
       if (m.puntos.length === m.n) m.alTerminar(...m.puntos);
       else m.alMarcar?.(m.puntos.length);
-    } else if (gesto.tipo === 'mirar' && !gesto.movio) {
-      seleccion = gesto.sombra != null ? { tipo: 'sombra', i: gesto.sombra } : null;
-      pintar();
-    }
+    } else if (gesto.tipo === 'mirar' && !gesto.movio) { seleccion = null; pintar(); }
     if (punteros.size === 0) gesto = null;
   }
 
@@ -415,19 +337,6 @@
           ctx.alCambiar(false); pintar();
           return;
         }
-        if (seleccion?.tipo === 'sombra') {
-          const o = plano().sombras[seleccion.i];
-          const alt = ev.target.closest('[data-altura]');
-          if (alt) {
-            o.altura = Number(alt.dataset.altura);
-            if (o.tipo === 'arbol') o.radio = S.COPA[o.altura] ?? o.radio;
-            ctx.alCambiar(false); pintar();
-          }
-          const quitar = ev.target.closest('[data-quitar-sombra]');
-          if (quitar && !quitar.dataset.confirmar) { quitar.dataset.confirmar = '1'; quitar.textContent = 'Tocá de nuevo para quitar'; }
-          else if (quitar) { plano().sombras.splice(seleccion.i, 1); seleccion = null; ctx.alCambiar(false); pintar(); }
-          return;
-        }
         const b = ev.target.closest('[data-girar]');
         if (!b || !seleccion) return;
         const obj = objeto(seleccion);
@@ -459,9 +368,6 @@
   const calibrar = (alMarcar, alTerminar) => marcar({ n: 2, etiquetas: ['A', 'B'], alMarcar, alTerminar });
 
   global.PLANO = { iniciar, pintar: () => ctx && pintar(), colorSector, soloSector: () => soloSector, calibrar, dejarDeCalibrar: dejarDeMarcar,
-    marcar, dejarDeMarcar, elegirSombra: i => { seleccion = { tipo: 'sombra', i }; pintar(); },
-    mapaSol: () => ctx ? mapaSol() : null,
-    solPorSector: () => ctx ? S.porSector(mapaSol(), plano(), ctx.aspersores(), G.riega) : [],
     reencuadrar: () => { if (ctx) { ajustar(); pintar(); } },
     coberturaActual: () => ctx ? G.cobertura(plano(), ctx.aspersores()) : null };
 })(typeof window !== 'undefined' ? window : globalThis);

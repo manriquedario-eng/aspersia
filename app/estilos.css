@@ -342,40 +342,18 @@ h3 { font-size: .9rem; margin: 14px 0 6px; color: var(--suave); }
 ol.pasos { margin: 0 0 12px; padding-left: 22px; }
 ol.pasos li { margin: 4px 0; }
 
-/* Sol y sombra */
-.botones-sombra { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-.botones-sombra .boton { flex: 1 1 0; min-width: 0; margin: 0; }
-.etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
-.plano .sombra-obj polygon, .plano .sombra-obj circle { cursor: pointer; }
-.plano .sombra-obj.casa polygon { fill: rgba(180, 83, 9, .55); stroke: #7c2d12; }   /* techo color teja: distinto de la sombra gris */
-.plano .sombra-obj.muro polygon { fill: #57534e; stroke: #292524; }
-.plano .sombra-obj.arbol circle { fill: rgba(22, 101, 52, .35); stroke: #166534; stroke-dasharray: .4 .25; }
-.plano .sombra-obj.elegida polygon, .plano .sombra-obj.elegida circle { stroke: var(--agua); }
-.plano .texto-sombra { fill: #fff; stroke: rgba(0, 0, 0, .55); paint-order: stroke; text-anchor: middle; font-weight: 700; pointer-events: none; }
-.dato.sol { background: #fef9c3; color: #854d0e; }
-.dato.media { background: #e2e8f0; color: #334155; }
-.dato.sombra { background: #334155; color: #fff; }
-.leyenda i.sol { background: rgb(253, 224, 71); }
-.leyenda i.media { background: rgb(203, 213, 225); }
-.leyenda i.sombra { background: rgb(51, 65, 85); }
-.aviso-sol { background: var(--aviso-fondo); color: var(--aviso); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; font-size: .9rem; }
-.sector-sol { margin: 4px 0 0; }
-.sector-sol i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+/* Lado del sol */
+.plano .capa-sol { pointer-events: none; }
+.leyenda i.sol { background: rgba(250, 204, 21, .7); }
+.leyenda i.menos-sol { background: rgba(148, 163, 184, .6); }
 .estadisticas .ayuda { flex-basis: 100%; }
 .rosa { position: absolute; top: 8px; left: 8px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, .85); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); pointer-events: none; }
 .rosa svg { width: 100%; height: 100%; overflow: visible; transition: transform .2s; }
 .rosa .rosa-n { fill: #e11d48; }
 .rosa .rosa-s { fill: #94a3b8; }
 .rosa text { font-size: 9px; font-weight: 800; text-anchor: middle; fill: #13233a; }
-.capas, #sol-epoca { flex-wrap: wrap; }
+.capas { flex-wrap: wrap; }
+.etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
 .capas { margin-top: 10px; }
-/* Tarjeta plegable (Sol y sombra: opcional, cerrada mientras no se use) */
-.plegable > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
-.plegable > summary::-webkit-details-marker { display: none; }
-.plegable > summary::after { content: '▸'; color: var(--primario); font-size: 1.1rem; transition: transform .2s; }
-.plegable[open] > summary::after { transform: rotate(90deg); }
-.plegable > summary h2 { margin: 0; }
-.plegable[open] > summary { margin-bottom: 8px; }
-.opcional { font-size: .8rem; font-weight: 500; color: var(--suave); }
 /* Opción elegida en los botones del panel del plano (arco, altura) */
 .giros .chico.activo { border-color: var(--primario); background: var(--primario-claro); color: var(--primario); font-weight: 700; }

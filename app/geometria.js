@@ -83,7 +83,7 @@
     return metrosReales / d;
   }
 
-  // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas, aspersores y lo que hace sombra.
+  // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas y aspersores.
   // Todo se multiplica desde la esquina de abajo a la izquierda, así cada cosa queda sobre el mismo lugar de la imagen.
   function escalarPlano(plano, sectores, k) {
     const r1 = v => Math.round(v * 100) / 100;
@@ -93,8 +93,6 @@
     const mover = p => { if (p && p.x != null) { p.x = r1(p.x * k); p.y = r1(p.y * k); } };
     mover(plano.fuente);
     for (const s of sectores) { mover(s.valvulaPos); s.aspersores.forEach(mover); }
-    // Lo que hace sombra se marcó sobre la imagen: se mueve con ella (el tamaño de la copa de un árbol es real y no cambia).
-    for (const o of plano.sombras || []) { mover(o); (o.puntos || []).forEach(mover); }
   }
 
   global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano };

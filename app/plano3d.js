@@ -30,7 +30,7 @@
     return new Promise(listo => { const im = new Image(); im.onload = () => listo(im); im.onerror = () => listo(null); im.src = src; });
   }
 
-  function texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo, mapaSol) {
+  function texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo, degradeSol) {
     const pxm = Math.min(40, 2048 / Math.max(terreno.ancho, terreno.largo));
     const c = document.createElement('canvas');
     c.width = Math.round(terreno.ancho * pxm); c.height = Math.round(terreno.largo * pxm);
@@ -40,15 +40,12 @@
       const f = terreno.fondo;
       g.drawImage(imagenFondo, 0, c.height - f.alto * pxm, f.ancho * pxm, f.alto * pxm);
     }
-    if (mapaSol) {
-      // Sol y sombra: amarillo sol pleno, gris claro media sombra, gris oscuro sombra
-      const m = mapaSol, cw = c.width / m.nx, ch = c.height / m.ny;
-      g.globalAlpha = imagenFondo ? 0.6 : 1;
-      for (let j = 0; j < m.ny; j++) for (let i = 0; i < m.nx; i++) {
-        const h = m.horas[j * m.nx + i];
-        g.fillStyle = h < 0 ? 'rgba(0,0,0,0)' : h >= 6 ? 'rgba(253,224,71,.6)' : h >= 3 ? 'rgba(203,213,225,.6)' : 'rgba(51,65,85,.6)';
-        g.fillRect(i * cw, c.height - (j + 1) * ch, cw + 0.5, ch + 0.5);
-      }
+    if (degradeSol) {
+      // Lado del sol: amarillo del lado norte (más sol), gris del lado sur (menos sol), igual que en el plano
+      const d = degradeSol, aCanvas = p => [p.x * pxm, c.height - p.y * pxm];
+      const grad = g.createLinearGradient(...aCanvas(d.norte), ...aCanvas(d.sur));
+      grad.addColorStop(0, 'rgba(250,204,21,.5)'); grad.addColorStop(1, 'rgba(148,163,184,.35)');
+      g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
     } else if (conCobertura && aspersores.length) {
       const cob = G.cobertura(terreno, aspersores, Math.max(0.1, Math.min(0.25, Math.max(terreno.ancho, terreno.largo) / 240)));
       const cw = c.width / cob.nx, ch = c.height / cob.ny;
@@ -153,7 +150,7 @@
     const imagenFondo = datos.terreno.fondo ? await cargarImagen(datos.terreno.fondo.imagen) : null;
     const T = global.THREE;
     contenedor.innerHTML = '';
-    const { terreno, aspersores, sectores, fuente, colorSector, conCobertura, mapaSol, sombras = [] } = datos;
+    const { terreno, aspersores, sectores, fuente, colorSector, conCobertura, degradeSol } = datos;
     const aX = x => x - terreno.ancho / 2, aZ = y => terreno.largo / 2 - y;
 
     const renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
@@ -168,30 +165,13 @@
     const grande = Math.max(terreno.ancho, terreno.largo);
     const tierra = new T.Mesh(new T.PlaneGeometry(grande * 2.2, grande * 2.2), new T.MeshLambertMaterial({ color: 0x8f9c7a }));
     tierra.rotation.x = -Math.PI / 2; tierra.position.y = -0.02; scene.add(tierra);
-    const suelo = new T.Mesh(new T.PlaneGeometry(terreno.ancho, terreno.largo), new T.MeshLambertMaterial({ map: texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo, mapaSol) }));
+    const suelo = new T.Mesh(new T.PlaneGeometry(terreno.ancho, terreno.largo), new T.MeshLambertMaterial({ map: texturaSuelo(T, terreno, aspersores, conCobertura, imagenFondo, degradeSol) }));
     suelo.rotation.x = -Math.PI / 2; scene.add(suelo);
 
-    // Lo que hace sombra: casas y muros como bloques de su altura, árboles con tronco y copa
-    for (const o of sombras) {
-      if (o.tipo === 'arbol') {
-        const tronco = new T.Mesh(new T.CylinderGeometry(0.12, 0.18, o.altura * 0.5, 10), new T.MeshLambertMaterial({ color: 0x6b4423 }));
-        tronco.position.set(aX(o.x), o.altura * 0.25, aZ(o.y)); scene.add(tronco);
-        const alto = Math.max(0.5, o.altura * 0.6);
-        const copa = new T.Mesh(new T.SphereGeometry(1, 18, 12), new T.MeshLambertMaterial({ color: 0x2f7d32 }));
-        copa.scale.set(o.radio, alto / 2, o.radio);
-        copa.position.set(aX(o.x), o.altura - alto / 2, aZ(o.y)); scene.add(copa);
-        continue;
-      }
-      const forma = new T.Shape(global.SOL.huella(o).poligono.map(p => new T.Vector2(aX(p.x), -aZ(p.y))));
-      const bloque = new T.Mesh(new T.ExtrudeGeometry(forma, { depth: o.altura, bevelEnabled: false }),
-        new T.MeshLambertMaterial({ color: o.tipo === 'casa' ? 0xe8dcc8 : 0x9a9189 }));
-      bloque.rotation.x = -Math.PI / 2; scene.add(bloque);
-    }
-
-    // Huellas de riego (si no se muestra la cobertura ni el sol) y cabezales
+    // Huellas de riego (si no se muestra la cobertura) y cabezales
     for (const a of aspersores) {
       const color = new T.Color(colorSector(a.s));
-      if (!conCobertura && !mapaSol) scene.add(huella(T, a, aX, aZ, color));
+      if (!conCobertura) scene.add(huella(T, a, aX, aZ, color));
       const cuerpo = new T.Mesh(new T.CylinderGeometry(0.09, 0.1, ALTURA_CABEZAL, 16), new T.MeshLambertMaterial({ color: 0x222831 }));
       cuerpo.position.set(aX(a.x), ALTURA_CABEZAL / 2, aZ(a.y)); scene.add(cuerpo);
       const tapa = new T.Mesh(new T.CylinderGeometry(0.16, 0.16, 0.04, 20), new T.MeshLambertMaterial({ color }));

@@ -162,36 +162,14 @@
             <button id="fondo-quitar" class="chico peligro" type="button">Quitar imagen</button>
           </div>
         </details>
-        <label class="tilde"><input id="plano-distancias" type="checkbox"> Calcular los caños con las distancias del plano</label>
-        <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto.</p>
-      </section>
-
-      <section class="tarjeta">
-        <details id="sol-caja" class="plegable">
-        <summary><h2>Sol y sombra <span class="opcional">· opcional</span></h2></summary>
-        <p class="ayuda arriba">Si querés ver qué partes del jardín tienen más sol, marcá lo que hace sombra: tocá qué querés marcar y después tocá sobre el plano. Si no marcás nada, el diseño funciona igual.</p>
-        <div class="botones-sombra">
-          <button type="button" class="boton" data-marcar="casa">+ Casa</button>
-          <button type="button" class="boton" data-marcar="muro">+ Muro</button>
-          <button type="button" class="boton" data-marcar="arbol">+ Árbol</button>
-        </div>
-        <div id="sombra-marcar" class="calibrar" hidden>
-          <p id="sombra-paso" class="ayuda"></p>
-          <button id="sombra-cancelar" class="chico" type="button">Cancelar</button>
-        </div>
-        <p class="etiqueta-campo">Época del año</p>
-        <div id="sol-epoca" class="filtro"></div>
         <details class="fondo">
-          <summary>Norte y ubicación de la obra</summary>
+          <summary>Norte del terreno (para saber de qué lado da más sol)</summary>
           <label>Hacia dónde está el norte <span class="unidad" id="sol-norte-valor"></span>
             <input id="sol-norte" type="range" min="0" max="355" step="5"></label>
-          <p class="ayuda">0° = el norte está arriba del plano. Las capturas de Google Maps ya vienen así (si giraste el mapa, tocá la brújula de Google Maps antes de la captura).</p>
-          <label>Latitud <span class="unidad">° (negativa al sur)</span>
-            <input id="sol-latitud" type="number" inputmode="decimal" step="0.1" min="-60" max="60"></label>
-          <button id="sol-gps" class="chico" type="button">Usar la ubicación del teléfono</button>
-          <p id="sol-gps-resultado" class="ayuda"></p>
+          <p class="ayuda">0° = el norte está arriba del plano. Las capturas de Google Maps ya vienen así (si giraste el mapa, tocá la brújula de Google Maps antes de la captura). Para ver el lado del sol, elegí "Sol" debajo del plano.</p>
         </details>
-        </details>
+        <label class="tilde"><input id="plano-distancias" type="checkbox"> Calcular los caños con las distancias del plano</label>
+        <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto.</p>
       </section>
 
       <section class="tarjeta plano-tarjeta">
@@ -219,7 +197,7 @@
         </div>
         <div id="plano-capa" class="filtro capas">
           <button type="button" data-capa="agua">Cobertura de agua</button>
-          <button type="button" data-capa="sol">Sol y sombra</button>
+          <button type="button" data-capa="sol">Sol</button>
           <button type="button" data-capa="nada">Solo el plano</button>
         </div>
         <div id="plano-estadisticas" class="estadisticas"></div>
