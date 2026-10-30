@@ -33,11 +33,10 @@
   };
 
   // Manguera de polietileno que va del conector inicial (en el caño del ramal) a la espiga en L de cada aspersor.
-  // La de ½" y la de 16 mm se usan igual (Darío): un solo tipo. No se encontró la ficha del fabricante:
-  // el diámetro interior es aproximado (≈ 13 mm). Conector inicial + espiga en L se cuentan como 1 m más
-  // de manguera (estimado). Darío: hasta 6 m de manguera por aspersor.
+  // La de ½" y la de 16 mm se usan igual (Darío): un solo tipo, clase K4. Conector inicial + espiga en L
+  // se cuentan como 1 m más de manguera (estimado). Darío: hasta 6 m de manguera por aspersor.
   const MANGUERAS = {
-    'pe-12': { nombre: 'Polietileno K4 de ½" o 16 mm', corto: '½"', di: 13.0, C: 140 },
+    'pe-12': { nombre: 'Polietileno K4 de ½" o 16 mm', corto: '½"', di: 13.6, C: 140 },   // Ø interior de la ficha Tigre Rural ½" (13,5 a 13,7 mm; 16 mm es el exterior)
   };
   const ACCESORIOS_MANGUERA_M = 1;
   const MANGUERA_MAX_M = 6;
