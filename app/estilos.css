@@ -347,18 +347,17 @@ ol.pasos li { margin: 4px 0; }
 .botones-sombra .boton { flex: 1 1 0; min-width: 0; margin: 0; }
 .etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
 .plano .sombra-obj polygon, .plano .sombra-obj circle { cursor: pointer; }
-.plano .sombra-obj.casa polygon { fill: rgba(71, 85, 105, .55); stroke: #334155; }
+.plano .sombra-obj.casa polygon { fill: rgba(180, 83, 9, .55); stroke: #7c2d12; }   /* techo color teja: distinto de la sombra gris */
 .plano .sombra-obj.muro polygon { fill: #57534e; stroke: #292524; }
 .plano .sombra-obj.arbol circle { fill: rgba(22, 101, 52, .35); stroke: #166534; stroke-dasharray: .4 .25; }
 .plano .sombra-obj.elegida polygon, .plano .sombra-obj.elegida circle { stroke: var(--agua); }
 .plano .texto-sombra { fill: #fff; stroke: rgba(0, 0, 0, .55); paint-order: stroke; text-anchor: middle; font-weight: 700; pointer-events: none; }
-.dato.sol { background: #ffedd5; color: #9a3412; }
-.dato.media { background: #fef9c3; color: #854d0e; }
-.dato.sombra { background: #e0e7ff; color: #3730a3; }
-.leyenda i.sol { background: rgba(249, 115, 22, .55); }
-.leyenda i.media { background: rgba(250, 204, 21, .6); }
-.leyenda i.sombra { background: rgba(67, 56, 202, .55); }
-.leyenda i.techo { background: rgba(100, 116, 139, .6); }
+.dato.sol { background: #fef9c3; color: #854d0e; }
+.dato.media { background: #e2e8f0; color: #334155; }
+.dato.sombra { background: #334155; color: #fff; }
+.leyenda i.sol { background: rgb(253, 224, 71); }
+.leyenda i.media { background: rgb(203, 213, 225); }
+.leyenda i.sombra { background: rgb(51, 65, 85); }
 .aviso-sol { background: var(--aviso-fondo); color: var(--aviso); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; font-size: .9rem; }
 .sector-sol { margin: 4px 0 0; }
 .sector-sol i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
@@ -378,3 +377,5 @@ ol.pasos li { margin: 4px 0; }
 .plegable > summary h2 { margin: 0; }
 .plegable[open] > summary { margin-bottom: 8px; }
 .opcional { font-size: .8rem; font-weight: 500; color: var(--suave); }
+/* Opción elegida en los botones del panel del plano (arco, altura) */
+.giros .chico.activo { border-color: var(--primario); background: var(--primario-claro); color: var(--primario); font-weight: 700; }

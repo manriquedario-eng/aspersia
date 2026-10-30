@@ -218,3 +218,23 @@ test('guardado: lo de localStorage pasa a IndexedDB una sola vez, sin perder nad
     assert.equal(A.diasDesde(A.hoy()), 0);
   } finally { delete globalThis.indexedDB; delete globalThis.localStorage; }
 });
+
+test('arco: el que se elige (en Diseño o en el plano) es el que dibuja el plano, y el giro no lo cambia', () => {
+  const { o } = obraDePrueba();
+  o.sectores = [{ ...A.sectorNuevo(1), aspersores: [
+    { tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180, regulador: 'PRS30', distancia: 2, altura: 0, manguera: 1, x: 2, y: 2, giro: 0 },
+    { tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 200, regulador: 'PRS30', distancia: 3, altura: 0, manguera: 1, x: 5, y: 2, giro: 0 },
+    { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 180, regulador: 'PRS40', distancia: 3, altura: 0, manguera: 1, x: 8, y: 2, giro: 0 },
+  ] }];
+  const arcos = () => O.aspersoresDelPlano(o).map(a => a.arco);
+  assert.deepEqual(arcos(), [180, 200, 180]);
+  const [fija, ajustable, mp] = o.sectores[0].aspersores;
+  fija.arco = 90; ajustable.arco = 45; mp.arco = 270;
+  assert.deepEqual(arcos(), [90, 45, 270]);
+  for (const a of o.sectores[0].aspersores) a.giro = 90;
+  assert.deepEqual(arcos(), [90, 45, 270], 'girar no cambia cuánto abre');
+  assert.ok(O.aspersoresDelPlano(o).every(a => a.giro === 90));
+  // Un arco que la MP no admite: no se dibuja (y la pantalla avisa), pero no rompe a los demás
+  mp.arco = 300;
+  assert.deepEqual(arcos(), [90, 45]);
+});

@@ -41,12 +41,12 @@
       g.drawImage(imagenFondo, 0, c.height - f.alto * pxm, f.ancho * pxm, f.alto * pxm);
     }
     if (mapaSol) {
-      // Sol y sombra: naranja sol pleno, amarillo media sombra, violeta sombra, gris bajo techo
+      // Sol y sombra: amarillo sol pleno, gris claro media sombra, gris oscuro sombra
       const m = mapaSol, cw = c.width / m.nx, ch = c.height / m.ny;
       g.globalAlpha = imagenFondo ? 0.6 : 1;
       for (let j = 0; j < m.ny; j++) for (let i = 0; i < m.nx; i++) {
         const h = m.horas[j * m.nx + i];
-        g.fillStyle = h < 0 ? 'rgba(100,116,139,.5)' : h >= 6 ? 'rgba(249,115,22,.6)' : h >= 3 ? 'rgba(250,204,21,.45)' : 'rgba(67,56,202,.45)';
+        g.fillStyle = h < 0 ? 'rgba(0,0,0,0)' : h >= 6 ? 'rgba(253,224,71,.6)' : h >= 3 ? 'rgba(203,213,225,.6)' : 'rgba(51,65,85,.6)';
         g.fillRect(i * cw, c.height - (j + 1) * ch, cw + 0.5, ch + 0.5);
       }
     } else if (conCobertura && aspersores.length) {

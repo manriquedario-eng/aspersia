@@ -57,7 +57,8 @@
     return lienzo.toDataURL();
   }
 
-  // Mapa de sol como imagen: naranja sol pleno, amarillo media sombra, violeta sombra, gris bajo techo.
+  // Mapa de sol como imagen: amarillo sol pleno, gris claro media sombra, gris oscuro sombra (el techo lo tapa la casa).
+  // Amarillo y grises para no confundirse con los colores de los sectores.
   function imagenSol(m) {
     const lienzo = document.createElement('canvas');
     lienzo.width = m.nx; lienzo.height = m.ny;
@@ -66,7 +67,7 @@
     for (let j = 0; j < m.ny; j++) for (let i = 0; i < m.nx; i++) {
       const h = m.horas[j * m.nx + i];
       const k = ((m.ny - 1 - j) * m.nx + i) * 4;
-      const [r, gr, b, al] = h < 0 ? [100, 116, 139, 120] : h >= 6 ? [249, 115, 22, 90] : h >= 3 ? [250, 204, 21, 80] : [67, 56, 202, 120];
+      const [r, gr, b, al] = h < 0 ? [0, 0, 0, 0] : h >= 6 ? [253, 224, 71, 120] : h >= 3 ? [203, 213, 225, 150] : [51, 65, 85, 150];
       img.data[k] = r; img.data[k + 1] = gr; img.data[k + 2] = b; img.data[k + 3] = al;
     }
     g.putImageData(img, 0, 0);
@@ -131,7 +132,8 @@
     const abanicos = el('g', {}, svg);
     for (const a of asps) {
       const [tag, attrs] = forma(a);
-      el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura || t.verSol ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
+      if (t.verSol) el(tag, { ...attrs, fill: 'none', stroke: colorSector(a.s), 'stroke-width': 2 * escala, 'stroke-dasharray': `${5 * escala} ${3 * escala}`, 'stroke-opacity': 0.95 }, abanicos);
+      else el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
     }
     // Caños: fuente → válvula → aspersores, en orden
     const sectores = ctx.obra.sectores;
@@ -197,7 +199,7 @@
     }
     ctx.estadisticas.innerHTML = html;
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol
-      ? '<i class="sol"></i> sol pleno <i class="media"></i> media sombra <i class="sombra"></i> sombra <i class="techo"></i> techo · ▲ fuente · ■ válvula'
+      ? '<i class="sol"></i> sol pleno <i class="media"></i> media sombra <i class="sombra"></i> sombra · línea cortada: lo que riega cada aspersor · ▲ fuente · ■ válvula'
       : '<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula';
     pintarSeleccion();
   }
@@ -220,17 +222,36 @@
     if (seleccion.tipo === 'valvula') titulo = `Válvula de ${ctx.obra.sectores[seleccion.s].nombre}`;
     if (seleccion.tipo === 'asp') {
       const a = ctx.aspersores().find(x => x.s === seleccion.s && x.i === seleccion.i);
-      titulo = `${ctx.obra.sectores[a.s].nombre} · aspersor ${a.i + 1}: ${a.nombre} · alcance ${a.radio.toFixed(1).replace('.', ',')} m`;
-      giro = a.arco >= 360 && !a.franja ? '<p class="ayuda">Círculo completo: no hace falta girarlo.</p>' : `
-        <label>Giro <span class="unidad">° (0 = hacia arriba)</span><input type="number" inputmode="numeric" step="5" data-sel="giro" value="${Math.round(obj.giro)}"></label>
+      const nombreSector = ctx.obra.sectores[seleccion.s].nombre;
+      titulo = a ? `${nombreSector} · aspersor ${a.i + 1}: ${a.nombre} · alcance ${a.radio.toFixed(1).replace('.', ',')} m`
+        : `${nombreSector} · aspersor ${seleccion.i + 1}: arco de ${obj.arco}° no válido para esta boquilla (elegí otro)`;
+      giro = controlArco(obj, a) + (a && a.arco >= 360 && !a.franja ? '<p class="ayuda">Círculo completo: no hace falta girarlo.</p>' : `
+        <label>Hacia dónde apunta <span class="unidad">° (0 = arriba, 90 = derecha, 180 = abajo, 270 = izquierda)</span><input type="number" inputmode="numeric" step="5" data-sel="giro" value="${Math.round(obj.giro || 0)}"></label>
         <div class="giros"><button type="button" class="chico" data-girar="-45">⟲ 45°</button><button type="button" class="chico" data-girar="-15">⟲ 15°</button>
-        <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`;
+        <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`);
     }
     caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>
       <div class="campos dos">
         <label>X <span class="unidad">m desde la izquierda</span><input type="number" inputmode="decimal" step="0.1" data-sel="x" value="${obj.x}"></label>
         <label>Y <span class="unidad">m desde abajo</span><input type="number" inputmode="decimal" step="0.1" data-sel="y" value="${obj.y}"></label>
       </div>${giro}`;
+  }
+
+  // Arco del abanico (cuánto abre), con las opciones que admite la boquilla. Es lo mismo que el arco de la pestaña Diseño.
+  function controlArco(obj, a) {
+    const O = global.OBRA, R = global.RIEGO;
+    if (a?.franja) return '';
+    if (O.arcoLibre(obj)) {
+      const mp3500 = O.esMP(obj) && obj.boquilla === 'MP3500';
+      const rapidos = mp3500 ? [90, 120, 180, 210] : [90, 180, 270, 360];
+      const ayuda = O.esMP(obj) ? (mp3500 ? 'de 90° a 210°' : 'de 90° a 270°, o 360°') : 'cualquiera de 1° a 360°';
+      return `<label>Arco: cuánto abre <span class="unidad">° (${ayuda})</span><input type="number" inputmode="numeric" step="5" min="1" max="360" data-arco-libre value="${obj.arco}"></label>
+        <div class="giros">${rapidos.map(x => `<button type="button" class="chico ${Number(obj.arco) === x ? 'activo' : ''}" data-arco="${x}">${x}°</button>`).join('')}</div>`;
+    }
+    const lista = R.emisores().filter(e => e.tipo === obj.tipo && e.boquilla === obj.boquilla && e.arco != null).map(e => e.arco);
+    if (lista.length > 1) return `<p class="etiqueta-campo">Arco: cuánto abre (esta boquilla viene en estos arcos)</p>
+        <div class="giros">${lista.map(x => `<button type="button" class="chico ${Number(obj.arco) === x ? 'activo' : ''}" data-arco="${x}">${x}°</button>`).join('')}</div>`;
+    return a ? `<p class="ayuda">Arco fijo de ${a.arco}° (esta boquilla viene así).</p>` : '';
   }
 
   function objeto(sel) {
@@ -380,7 +401,20 @@
         const foco = campo; pintar();
         ctx.seleccion.querySelector(`[data-sel=${foco}]`)?.focus();
       });
+      ctx.seleccion.addEventListener('change', ev => {
+        if (!ev.target.matches('[data-arco-libre]') || seleccion?.tipo !== 'asp') return;
+        const v = Math.round(parseFloat(String(ev.target.value).replace(',', '.')));
+        if (!(v >= 1 && v <= 360)) return pintar();
+        objeto(seleccion).arco = v;
+        ctx.alCambiar(false); pintar();
+      });
       ctx.seleccion.addEventListener('click', ev => {
+        const arco = ev.target.closest('[data-arco]');
+        if (arco && seleccion?.tipo === 'asp') {
+          objeto(seleccion).arco = Number(arco.dataset.arco);
+          ctx.alCambiar(false); pintar();
+          return;
+        }
         if (seleccion?.tipo === 'sombra') {
           const o = plano().sombras[seleccion.i];
           const alt = ev.target.closest('[data-altura]');
