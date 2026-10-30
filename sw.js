@@ -1,7 +1,7 @@
 // Modo sin señal: guarda la app en el teléfono la primera vez y después la abre desde ahí.
 // Cuando hay señal, baja en segundo plano la versión nueva, que se ve la próxima vez que se abre.
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
-const VERSION = 'aspersia-v13';
+const VERSION = 'aspersia-v14';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -26,6 +26,9 @@ const ARCHIVOS = [
   'app/marca/marca.png',
   'app/marca/logo-pdf.png',
   'app/iconos/aspersia-180.png',
+  // Los mismos íconos con el nombre de antes: un teléfono con la versión vieja guardada los sigue pidiendo así.
+  'app/iconos/icono-180.png',
+  'apple-touch-icon.png',
   'app/iconos/aspersia-192.png',
   'app/iconos/aspersia-512.png',
   'app/iconos/aspersia-maskable-512.png',
