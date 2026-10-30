@@ -28,6 +28,10 @@
 <main>
   <!-- ===================== Inicio: obras ===================== -->
   <div id="vista-inicio" class="vista">
+    <section id="recordar-copia" class="tarjeta recordar" hidden>
+      <p id="recordar-copia-texto"></p>
+      <button id="recordar-copia-boton" class="principal lleno ancho" type="button">Guardar copia en iCloud</button>
+    </section>
     <section class="tarjeta">
       <h2>Obras</h2>
       <ul id="lista-obras" class="sectores"></ul>
@@ -320,14 +324,19 @@
     <a href="#/" class="volver">‹ Obras</a>
     <section class="tarjeta">
       <h2>Copia de seguridad</h2>
-      <p>Todo lo que cargás queda guardado solo en este teléfono. Si se rompe, lo cambiás o se borran los datos de Safari, se pierde.</p>
-      <p>Guardá una copia de vez en cuando, por ejemplo en Archivos de iCloud o mandátela por correo.</p>
-      <button id="exportar" class="principal lleno ancho" type="button">Guardar copia de todo</button>
+      <p>Todo lo que cargás queda guardado en este teléfono. Si se rompe o lo cambiás, sin copia se pierde.</p>
+      <p>La copia es un solo archivo con todas las obras, precios, tus datos y las fotos de fondo. Guardala en tu iCloud:</p>
+      <ol class="pasos">
+        <li>Tocá <b>Guardar copia en iCloud</b>.</li>
+        <li>En el menú que aparece, elegí <b>Guardar en Archivos</b>.</li>
+        <li>Elegí <b>iCloud Drive</b> (si querés, una carpeta "Aspersia") y tocá <b>Guardar</b>.</li>
+      </ol>
+      <button id="exportar" class="principal lleno ancho" type="button">Guardar copia en iCloud</button>
       <p class="ayuda" id="copia-info"></p>
     </section>
     <section class="tarjeta">
       <h2>Recuperar una copia</h2>
-      <p class="ayuda arriba">Reemplaza todo lo que hay ahora en el teléfono por lo de la copia.</p>
+      <p class="ayuda arriba">Elegí el archivo en iCloud Drive. Reemplaza todo lo que hay ahora en el teléfono por lo de la copia (lo de ahora queda guardado aparte por las dudas). Sirve también para pasar todo a un teléfono nuevo.</p>
       <label class="principal ancho archivo">Elegir archivo de copia
         <input id="importar" type="file" accept="application/json,.json"></label>
       <p id="importar-resultado" class="ayuda"></p>

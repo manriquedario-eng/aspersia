@@ -335,3 +335,9 @@ h3 { font-size: .9rem; margin: 14px 0 6px; color: var(--suave); }
 .plano .cobertura.sobre-fondo { opacity: .5; }
 .plano.calibrando .cobertura { display: none; }
 .plano .fondo-imagen { pointer-events: none; }
+
+/* Recordatorio de copia de seguridad en Obras */
+.tarjeta.recordar { border: 2px solid var(--agua, #0A9AE9); }
+.tarjeta.recordar p { margin-top: 0; }
+ol.pasos { margin: 0 0 12px; padding-left: 22px; }
+ol.pasos li { margin: 4px 0; }

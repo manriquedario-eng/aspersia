@@ -182,3 +182,39 @@ test('copia de seguridad: lo que se guarda es lo que se recupera', async () => {
   assert.equal(vuelta.siguienteNumero, 13);
   assert.throws(() => A.importar('{"hola":1}'), /no es una copia de seguridad/);
 });
+
+test('guardado: lo de localStorage pasa a IndexedDB una sola vez, sin perder nada, y libera ese lugar', async () => {
+  // localStorage e IndexedDB de mentira, con lo mínimo que usa almacen.js
+  const ls = new Map();
+  globalThis.localStorage = { getItem: k => ls.has(k) ? ls.get(k) : null, setItem: (k, v) => ls.set(k, String(v)), removeItem: k => ls.delete(k) };
+  const tablas = new Map();
+  const asinc = (req, fn) => setTimeout(() => { try { req.result = fn(); req.onsuccess?.(); } catch (e) { req.error = e; req.onerror?.(); } });
+  globalThis.indexedDB = { open() {
+    const req = {};
+    const db = { createObjectStore: n => tablas.set(n, new Map()), transaction(n) {
+      const tx = { objectStore: () => ({
+        get: k => { const r = {}; asinc(r, () => structuredClone(tablas.get(n).get(k))); return r; },
+        put: (v, k) => { tablas.get(n).set(k, structuredClone(v)); setTimeout(() => tx.oncomplete?.()); },
+      }) };
+      return tx;
+    } };
+    setTimeout(() => { req.result = db; if (!tablas.size) req.onupgradeneeded?.(); req.onsuccess?.(); });
+    return req;
+  } };
+  try {
+    const { o } = obraDePrueba();
+    o.plano.fondo = { imagen: 'data:image/jpeg;base64,AAAA', ancho: 30, alto: 20, opacidad: 70 };
+    ls.set('aspersia.datos.v3', JSON.stringify({ version: 3, instalador: {}, precios: { x: 1 }, siguienteNumero: 5, obras: [o] }));
+    const d1 = await A.abrir();
+    assert.equal(d1.obras[0].plano.fondo.ancho, 30, 'la foto pasó');
+    assert.equal(ls.has('aspersia.datos.v3'), false, 'se liberó localStorage');
+    d1.precios.x = 2;
+    assert.equal(await A.guardar(d1), true);
+    const d2 = await A.abrir();   // como si se volviera a abrir la app
+    assert.equal(d2.precios.x, 2);
+    assert.deepEqual(d2.obras[0].sectores, o.sectores);
+    assert.equal(await A.guardarAparte('antes-de-recuperar', d2), true);
+    assert.equal(tablas.get('datos').get('antes-de-recuperar').siguienteNumero, 5);
+    assert.equal(A.diasDesde(A.hoy()), 0);
+  } finally { delete globalThis.indexedDB; delete globalThis.localStorage; }
+});

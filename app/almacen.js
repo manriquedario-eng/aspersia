@@ -81,9 +81,59 @@
   }
   // Terreno del plano en metros. Las posiciones de aspersores y válvulas se guardan en cada sector.
   const planoNuevo = () => ({ ancho: 20, largo: 15, fuente: { x: 0.5, y: 0.5 }, distanciasDesdePlano: false, verCobertura: true });
-  function guardar(datos) {
+
+  // ---------- Dónde se guarda ----------
+  // localStorage solo admite ~5 MB por app web: con fotos de fondo se llena. Los datos van a IndexedDB,
+  // que en el iPhone admite cientos de MB. Si IndexedDB no está (pruebas, modo privado), se sigue con localStorage.
+  const BASE = 'aspersia', ALMACEN_IDB = 'datos', PRINCIPAL = 'principal';
+  let base = null;   // conexión abierta a IndexedDB, o null si se usa localStorage
+
+  const pedido = req => new Promise((listo, error) => { req.onsuccess = () => listo(req.result); req.onerror = () => error(req.error); });
+  function abrirBase() {
+    if (!global.indexedDB) return Promise.resolve(null);
+    const req = indexedDB.open(BASE, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(ALMACEN_IDB);
+    return pedido(req).catch(() => null);
+  }
+  const leer = clave => pedido(base.transaction(ALMACEN_IDB).objectStore(ALMACEN_IDB).get(clave));
+  function escribir(clave, valor) {
+    const tx = base.transaction(ALMACEN_IDB, 'readwrite');
+    tx.objectStore(ALMACEN_IDB).put(valor, clave);
+    return new Promise((listo, error) => { tx.oncomplete = () => listo(); tx.onerror = tx.onabort = () => error(tx.error); });
+  }
+
+  // Abre los datos al arrancar. La primera vez pasa lo que había en localStorage a IndexedDB y libera ese lugar.
+  async function abrir() {
+    base = await abrirBase();
+    // Que el iPhone no borre estos datos aunque le falte lugar (en la app instalada suele concederlo solo).
+    try { await navigator.storage?.persist?.(); } catch { /* no disponible */ }
+    if (!base) return cargar();
+    let datos = null;
+    try { datos = await leer(PRINCIPAL); } catch { /* base rota: se intenta con lo de antes */ }
+    if (datos && datos.version === 3) return completar(datos);
+    datos = cargar();
+    try {
+      await escribir(PRINCIPAL, datos);
+      if ((await leer(PRINCIPAL))?.version === 3) localStorage.removeItem(CLAVE);
+    } catch { base = null; }   // si IndexedDB falla, se sigue con localStorage
+    return datos;
+  }
+
+  // Guarda todo. Devuelve una promesa: true si se guardó, false si no hay lugar.
+  async function guardar(datos) {
+    if (base) {
+      try { await escribir(PRINCIPAL, datos); return true; } catch { return false; }
+    }
     try { localStorage.setItem(CLAVE, JSON.stringify(datos)); return true; } catch { return false; }
   }
+  // Una copia aparte (por ejemplo, lo que había antes de recuperar una copia de seguridad).
+  async function guardarAparte(nombre, datos) {
+    if (base) { try { await escribir(nombre, structuredClone(datos)); return true; } catch { return false; } }
+    try { localStorage.setItem(`${CLAVE}.${nombre}`, JSON.stringify(datos)); return true; } catch { return false; }
+  }
+
+  // Días desde una fecha AAAA-MM-DD hasta hoy.
+  const diasDesde = fecha => Math.floor((Date.parse(hoy()) - Date.parse(fecha)) / 86400000);
 
   // Copia de seguridad: todo en un archivo .json que se puede volver a cargar.
   function exportar(datos) {
@@ -96,5 +146,5 @@
     return completar(d);
   }
 
-  global.ALMACEN = { ESTADOS, cargar, guardar, obraNueva, sectorNuevo, aspersorInicial, nuevoId, hoy, exportar, importar };
+  global.ALMACEN = { ESTADOS, abrir, cargar, guardar, guardarAparte, diasDesde, obraNueva, sectorNuevo, aspersorInicial, nuevoId, hoy, exportar, importar };
 })(typeof window !== 'undefined' ? window : globalThis);

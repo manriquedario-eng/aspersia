@@ -5,27 +5,28 @@
 //   #/precios  #/datos  #/copia
 // Usa RIEGO (cálculo), PRESUPUESTO (materiales y totales), ALMACEN (guardado) y PDF.
 
-(function () {
+(async function () {
   const R = window.RIEGO, P = window.PRESUPUESTO, A = window.ALMACEN, C = window.CZERWENY;
   const $ = id => document.getElementById(id);
   const fmt = R.fmt;
 
-  const datos = A.cargar();
+  const datos = await A.abrir();
   let obra = null;          // obra abierta
   let nSector = null;       // índice del sector abierto
   let pendiente = null;
   // Guarda enseguida y marca la obra como modificada.
   const guardar = () => {
     if (obra) obra.actualizada = A.hoy();
+    datos.cambiosSinCopia ||= A.hoy();   // desde cuándo hay cambios que no están en ninguna copia
     clearTimeout(pendiente);
-    pendiente = setTimeout(() => { if (!A.guardar(datos)) avisarSinLugar(); }, 150);
+    pendiente = setTimeout(async () => { if (!await A.guardar(datos)) avisarSinLugar(); }, 150);
   };
   // El teléfono le da a cada app web unos 5 MB: con muchas fotos de fondo se puede llenar.
   function avisarSinLugar() {
     if (document.querySelector('.aviso-flotante')) return;
     const d = document.createElement('div');
     d.className = 'aviso-flotante';
-    d.textContent = 'No queda lugar para guardar en el teléfono: lo último que cambiaste no se guardó. Quitá la foto de fondo de alguna obra vieja o borrá obras que ya no uses (antes guardá una copia de seguridad).';
+    d.textContent = 'No se pudo guardar en el teléfono: lo último que cambiaste no quedó guardado. Revisá que el iPhone tenga lugar libre (Configuración › General › Almacenamiento) y guardá una copia de seguridad en iCloud.';
     document.body.appendChild(d);
     setTimeout(() => d.remove(), 12000);
   }
@@ -110,7 +111,7 @@
     if (seccion === 'precios') { mostrar('precios'); subtitulo('Lista de precios'); return pintarPrecios(); }
     if (seccion === 'datos') { mostrar('datos'); subtitulo('Mis datos'); return pintarDatos(); }
     if (seccion === 'copia') { mostrar('copia'); subtitulo('Copia de seguridad'); return pintarCopia(); }
-    mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio();
+    mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio(); pintarRecordatorio();
   }
   const subtitulo = t => $('subtitulo').textContent = t;
   window.addEventListener('hashchange', rutear);
@@ -894,29 +895,46 @@
   // =====================================================================
   // Copia de seguridad
   // =====================================================================
+  const fechaLarga = f => f.split('-').reverse().join('/');
   function pintarCopia() {
-    $('copia-info').textContent = datos.ultimaCopia
-      ? `Última copia guardada: ${datos.ultimaCopia}. Tenés ${datos.obras.length} obra${datos.obras.length === 1 ? '' : 's'}.`
-      : `Todavía no guardaste ninguna copia. Tenés ${datos.obras.length} obra${datos.obras.length === 1 ? '' : 's'}.`;
+    const obras = `Tenés ${datos.obras.length} obra${datos.obras.length === 1 ? '' : 's'}`;
+    const mb = new Blob([JSON.stringify(datos)]).size / 1048576;
+    $('copia-info').textContent = (datos.ultimaCopia
+      ? `Última copia: ${fechaLarga(datos.ultimaCopia)}${datos.cambiosSinCopia ? ' (después cambiaste cosas)' : ' (está al día)'}. `
+      : 'Todavía no guardaste ninguna copia. ') + `${obras}; la copia pesa unos ${mb < 0.1 ? '0,1' : fmt(mb, 1)} MB.`;
   }
-  $('exportar').addEventListener('click', async () => {
-    datos.ultimaCopia = A.hoy();
-    A.guardar(datos);
+  // Recordatorio en Obras: hace 7 días o más que hay cambios sin copia.
+  const DIAS_RECORDAR = 7;
+  function pintarRecordatorio() {
+    const dias = datos.cambiosSinCopia ? A.diasDesde(datos.cambiosSinCopia) : 0;
+    $('recordar-copia').hidden = dias < DIAS_RECORDAR;
+    $('recordar-copia-texto').textContent = datos.ultimaCopia
+      ? `Hace ${A.diasDesde(datos.ultimaCopia)} días que no guardás una copia en iCloud y desde entonces cambiaste cosas.`
+      : 'Todavía no guardaste ninguna copia de tus obras en iCloud.';
+  }
+  async function guardarCopia() {
     const archivo = new File([A.exportar(datos)], `Aspersia copia ${A.hoy()}.json`, { type: 'application/json' });
+    let guardada = false;
     if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-      try { await navigator.share({ files: [archivo], title: archivo.name }); } catch (err) { if (err.name !== 'AbortError') descargar(archivo); }
-    } else descargar(archivo);
-    pintarCopia();
-  });
+      try { await navigator.share({ files: [archivo], title: archivo.name }); guardada = true; }
+      catch (err) { if (err.name !== 'AbortError') { descargar(archivo); guardada = true; } }
+    } else { descargar(archivo); guardada = true; }
+    // Si cerró la hoja de compartir sin guardar, no cuenta como copia.
+    if (guardada) { datos.ultimaCopia = A.hoy(); delete datos.cambiosSinCopia; await A.guardar(datos); }
+    pintarCopia(); pintarRecordatorio();
+  }
+  $('exportar').addEventListener('click', guardarCopia);
+  $('recordar-copia-boton').addEventListener('click', guardarCopia);
   $('importar').addEventListener('change', async ev => {
     const archivo = ev.target.files[0];
     if (!archivo) return;
     try {
       const nuevos = A.importar(await archivo.text());
-      localStorage.setItem('aspersia.datos.v3.antes-de-recuperar', JSON.stringify(datos));
+      await A.guardarAparte('antes-de-recuperar', datos);
       for (const k of Object.keys(datos)) delete datos[k];
       Object.assign(datos, nuevos);
-      A.guardar(datos);
+      delete datos.cambiosSinCopia;
+      await A.guardar(datos);
       $('importar-resultado').textContent = `Listo: se recuperaron ${datos.obras.length} obra${datos.obras.length === 1 ? '' : 's'}. Lo que había antes quedó guardado aparte por si hace falta.`;
     } catch (err) {
       $('importar-resultado').textContent = err.message.startsWith('El archivo') ? err.message : 'No se pudo leer el archivo. Elegí una copia de Aspersia (.json).';
