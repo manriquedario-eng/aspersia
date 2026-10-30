@@ -26,13 +26,13 @@ function obraDePrueba() {
   o.fuente = { tipo: 'bomba', linea: 'ZETA', modelo: 'ZETA 3', aspiracion: 1 };
   o.sectores = [
     { ...A.sectorNuevo(1), nombre: 'Frente', superficie: 0, aspersores: [
-      { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 120, regulador: 'PRS40', distancia: 2, altura: 0 },
-      { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 180, regulador: 'PRS40', distancia: 5, altura: 0 },
-      { tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 200, regulador: 'PRS30', distancia: 4, altura: 0 },
+      { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 120, regulador: 'PRS40', distancia: 2, altura: 0, manguera: 1 },
+      { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 180, regulador: 'PRS40', distancia: 5, altura: 0, manguera: 2 },
+      { tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 200, regulador: 'PRS30', distancia: 4, altura: 0, manguera: 1.5 },
     ] },
     { ...A.sectorNuevo(2), nombre: 'Fondo', superficie: 160, lateral: { material: 'pead-pn6', nominal: 32 }, aspersores: [
-      { tipo: 'Turbina PGP Ultra', boquilla: '3.0', arco: 180, regulador: '', distancia: 3, altura: 0 },
-      { tipo: 'Turbina PGP Ultra con boquilla MPR', boquilla: 'MPR-30', arco: 90, regulador: '', distancia: 9, altura: 0 },
+      { tipo: 'Turbina PGP Ultra', boquilla: '3.0', arco: 180, regulador: '', distancia: 3, altura: 0, manguera: 1 },
+      { tipo: 'Turbina PGP Ultra con boquilla MPR', boquilla: 'MPR-30', arco: 90, regulador: '', distancia: 9, altura: 0, manguera: 0 },
     ] },
   ];
   return { o, datos };
@@ -84,12 +84,12 @@ test('plano: las distancias del plano llegan al cálculo y al presupuesto', () =
   // El cálculo usa esos tramos
   const c = O.calcular(o, o.sectores[0]);
   assert.deepEqual(c.r.tramos.map(t => t.largo), [3.2, 6, 6]);
-  // El presupuesto cuenta esos metros: caño 25 = 15,2 m (Frente) + 3 m de alimentación compartida... cada material por separado
+  // El presupuesto cuenta esos metros, cada material y diámetro por separado (+10 % de desperdicio)
   const m = P.materialesDeObra(o, O.paraCalcular(o));
-  const cano25 = m.renglones.find(r => r.clave === 'cano-pead-pn6-25').cantidad;
-  const cano32 = m.renglones.find(r => r.clave === 'cano-pead-pn6-32').cantidad;
-  assert.equal(cano25, Math.ceil(15.2 * 1.1));                 // lateral del Frente
-  assert.equal(cano32, Math.ceil((11 + 3) * 1.1));             // lateral del Fondo + la alimentación más larga (3 m)
+  const q = clave => m.renglones.find(r => r.clave === clave).cantidad;
+  assert.equal(q('cano-pvc-k6-32'), Math.ceil(15.2 * 1.1));     // ramal del Frente (PVC K6 32)
+  assert.equal(q('cano-pead-pn6-32'), Math.ceil(11 * 1.1));     // ramal del Fondo (PEAD 32)
+  assert.equal(q('cano-pvc-k6-40'), Math.ceil(3 * 1.1));        // alimentación compartida: la más larga (3 m)
   // El plano dibuja cada aspersor con el mismo alcance que dio el cálculo
   const dibujo = O.aspersoresDelPlano(o);
   assert.equal(dibujo.length, 5);
@@ -100,6 +100,20 @@ test('plano: las distancias del plano llegan al cálculo y al presupuesto', () =
   // La cobertura usa esos mismos aspersores
   const cob = G.cobertura(o.plano, dibujo);
   assert.ok(Math.abs(cob.seco + cob.uno + cob.bien - 100) < 1e-6);
+});
+
+test('manguera: cada aspersor pierde en su manguera sin afectar a los demás, y avisa pasados los 6 m', () => {
+  const { o } = obraDePrueba();
+  const c = O.calcular(o, o.sectores[0]);
+  for (const a of c.r.aspersores) {
+    const esperado = R.perdidaCano(a.caudal, a.manguera + R.ACCESORIOS_MANGUERA_M, R.MANGUERAS['pe-12'].di, R.MANGUERAS['pe-12'].C);
+    assert.ok(Math.abs(a.presionCano - a.presionEntrada - esperado) < 1e-3, `pérdida en la manguera del aspersor ${a.n}`);
+  }
+  // La presión del caño en un aspersor no depende de la manguera de los anteriores: solo de lo que pasa por el caño.
+  const sinManguera = O.calcular({ ...o }, { ...o.sectores[0], aspersores: o.sectores[0].aspersores.map(a => ({ ...a, manguera: 0 })) });
+  assert.ok(sinManguera.r.aspersores[2].presionCano < c.r.aspersores[2].presionCano + 0.05, 'mismo orden de presión en el caño');
+  o.sectores[0].aspersores[0].manguera = 8;
+  assert.ok(O.calcular(o, o.sectores[0]).r.avisos.some(a => a.texto.includes('más de los 6 m')));
 });
 
 test('presupuesto: materiales coherentes con el diseño', () => {
@@ -114,7 +128,15 @@ test('presupuesto: materiales coherentes con el diseño', () => {
   assert.equal(q('boq-MPR-30-90'), 1);
   assert.equal(q('valvula-pgv-1'), 2);
   assert.equal(q('programador-2'), 1);
-  assert.equal(q('conexion-aspersor'), 5);
+  // Conexión al caño: 4 con manguera (conector inicial + espiga) y la turbina con MPR directo al caño
+  assert.equal(q('conector-inicial-pe-12'), 4);
+  assert.equal(q('espiga-l-pe-12-½"'), 3, 'MP y ajustable: cuerpo Pro-Spray de ½"');
+  assert.equal(q('espiga-l-pe-12-¾"'), 1, 'PGP Ultra: entrada de ¾"');
+  assert.equal(q('conexion-aspersor'), 1);
+  assert.equal(q('manguera-pe-12'), Math.ceil((1 + 2 + 1.5 + 1) * 1.1));
+  assert.equal(q('tapon-pvc-k6-32'), 1);
+  assert.equal(q('tapon-pead-pn6-32'), 1);
+  assert.equal(q('pegamento-pvc'), 1);
   assert.equal(q('bomba-ZETA-ZETA 3'), 1);
   // m²: Fondo cargado (160) + Frente estimado con el alcance real de cada aspersor
   const cFrente = O.calcular(o, o.sectores[0]);

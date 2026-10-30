@@ -74,16 +74,33 @@
     };
     const desperdicio = 1 + (obra.presupuesto?.desperdicio ?? 10) / 100;
     const canos = new Map();      // material-nominal → { lateral, alimentacion }
-    let valvulas = 0, aspersores = 0, m2 = 0, m2Estimados = false;
+    const mangueras = new Map();  // tipo de manguera → { mang, metros }
+    let valvulas = 0, aspersores = 0, m2 = 0, m2Estimados = false, usaPVC = false;
     const notas = [];
 
     obra.sectores.forEach((s, i) => {
       let r = null;
       try { r = R.calcularSector(sectorParaCalcular(s)); } catch { notas.push(`El ${s.nombre || 'sector ' + (i + 1)} tiene un error y no se contó.`); return; }
+      const mang = s.manguera && R.MANGUERAS[s.manguera];
       r.aspersores.forEach((a, j) => {
         aspersores++;
         for (const [clave, desc, u] of renglonesAspersor(a.emisor, a.regulador)) sumar(clave, 'Materiales', desc, u, 1);
+        // Conexión al caño, como instala Darío: conector inicial + manguera + espiga en L con la rosca del cuerpo
+        // (½" los Pro-Spray, pág. 67; ¾" las PGP Ultra, pág. 22). Sin manguera, va directo al caño.
+        if (mang && a.manguera > 0) {
+          const rosca = a.emisor.cuerpo === 'PGP Ultra' ? '¾"' : '½"';
+          sumar(`conector-inicial-${s.manguera}`, 'Materiales', `Conector inicial para manguera de ${mang.corto}`, 'u', 1);
+          sumar(`espiga-l-${s.manguera}-${rosca}`, 'Materiales', `Espiga en L a 90° para manguera de ${mang.corto} con rosca de ${rosca}`, 'u', 1);
+          const m = mangueras.get(s.manguera) || { mang, metros: 0 };
+          m.metros += a.manguera;
+          mangueras.set(s.manguera, m);
+        } else sumar('conexion-aspersor', 'Materiales', 'Conexión directa al caño (te o buje y niple)', 'u', 1);
       });
+      // El ramal del sector termina con un tapón.
+      const tipoLat = R.CANOS[s.lateral.material];
+      sumar(`tapon-${s.lateral.material}-${s.lateral.nominal}`, 'Materiales',
+        /^pvc/.test(s.lateral.material) ? `Tapón de PVC de ${s.lateral.nominal} mm` : `Tapón final de caño ${tipoLat.nombre} de ${s.lateral.nominal} mm`, 'u', 1);
+      if (/^pvc/.test(s.lateral.material) || /^pvc/.test(s.alimentacion?.material || '')) usaPVC = true;
       if (s.valvula) valvulas++;
       const lat = `${s.lateral.material}-${s.lateral.nominal}`;
       const c = canos.get(lat) || { material: s.lateral.material, nominal: s.lateral.nominal, lateral: 0, alimentacion: 0 };
@@ -100,11 +117,13 @@
       else { m2 += superficieEstimada(r, s.aspersores); m2Estimados = true; }
     });
 
-    if (aspersores) sumar('conexion-aspersor', 'Materiales', 'Conexión por aspersor (codo articulado, te y abrazaderas)', 'u', aspersores);
+    for (const [tipo, m] of mangueras)
+      sumar(`manguera-${tipo}`, 'Materiales', `Manguera de ${m.mang.nombre.charAt(0).toLowerCase()}${m.mang.nombre.slice(1)}`, 'm', Math.ceil(m.metros * desperdicio));
+    if (usaPVC) sumar('pegamento-pvc', 'Materiales', 'Adhesivo para caños de PVC', 'u', 1);
     if (valvulas) {
       sumar('valvula-pgv-1', 'Materiales', 'Electroválvula Hunter PGV-101 de 1"', 'u', valvulas);
       sumar('caja-valvulas', 'Materiales', 'Caja para válvulas con tapa', 'u', 1);
-      sumar(`programador-${valvulas}`, 'Materiales', `Programador Hunter de ${valvulas} estacion${valvulas === 1 ? '' : 'es'}`, 'u', 1);
+      sumar(`programador-${valvulas}`, 'Materiales', `Programador Hunter de ${valvulas} ${valvulas === 1 ? 'estación' : 'estaciones'}`, 'u', 1);
     }
     let metrosZanja = 0;
     for (const c of canos.values()) {

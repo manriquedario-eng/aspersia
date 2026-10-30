@@ -248,6 +248,7 @@
         <label>Caño del sector <select id="lat-material"></select></label>
         <label>Diámetro <select id="lat-nominal"></select></label>
       </div>
+      <p class="ayuda">El caño termina con tapón. Cada aspersor sale con conector inicial, manguera de polietileno K4 de ½" o 16 mm y espiga en L. "Distancia" es por el caño; "Manguera" es lo que va del caño al aspersor (0 si va directo al caño).</p>
       <ol id="aspersores" class="aspersores"></ol>
       <button id="agregar" class="boton" type="button">+ Agregar aspersor</button>
     </section>
@@ -330,6 +331,7 @@
         <option value="PRS40">PRS40 · 2,8 bar</option>
       </select></label>
       <label><span data-texto="distancia"></span> <span class="unidad">m</span><input data-campo="distancia" type="number" inputmode="decimal" step="0.1" min="0"></label>
+      <label>Manguera <span class="unidad">m (hasta 6)</span><input data-campo="manguera" type="number" inputmode="decimal" step="0.5" min="0" max="6"></label>
       <label>Altura <span class="unidad">m</span><input data-campo="altura" type="number" inputmode="decimal" step="0.1"></label>
     </div>
   </li>

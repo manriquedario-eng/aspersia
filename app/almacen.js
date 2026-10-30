@@ -9,13 +9,16 @@
   const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const hoy = () => new Date().toISOString().slice(0, 10);
 
-  const aspersorInicial = i => ({ tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180, regulador: 'PRS30', distancia: i ? 3.7 : 2, altura: 0 });
+  // Como instala Darío: caño de PVC K6 (Tigre) desde la bomba a las válvulas y en el ramal de cada sector,
+  // que termina con tapón; de ahí, conector inicial + manguera de polietileno (hasta 6 m) + espiga en L a cada aspersor.
+  const aspersorInicial = i => ({ tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180, regulador: 'PRS30', distancia: i ? 3.7 : 2, altura: 0, manguera: 1 });
   const sectorNuevo = n => ({
     nombre: `Sector ${n}`,
     superficie: 0,
-    alimentacion: { material: 'pead-pn6', nominal: 32, largo: 10, desnivel: 0 },
+    alimentacion: { material: 'pvc-k6', nominal: 40, largo: 10, desnivel: 0 },
     valvula: true,
-    lateral: { material: 'pead-pn6', nominal: 25 },
+    lateral: { material: 'pvc-k6', nominal: 32 },
+    manguera: 'pe-12',
     aspersores: [0, 1, 2, 3].map(aspersorInicial),
   });
   function obraNueva(datos) {
@@ -67,7 +70,12 @@
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
       o.plano ||= planoNuevo();
-      for (const s of o.sectores) s.superficie ??= 0;
+      for (const s of o.sectores) {
+        s.superficie ??= 0;
+        // Obras de antes de la manguera: se agrega el tipo, pero cada aspersor queda con 0 m (como estaba calculado).
+        s.manguera ??= 'pe-12';
+        for (const a of s.aspersores) a.manguera ??= 0;
+      }
     }
     return datos;
   }

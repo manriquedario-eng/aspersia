@@ -25,8 +25,8 @@
     fuente: obra.fuente.tipo === 'bomba'
       ? { tipo: 'bomba', linea: obra.fuente.linea, modelo: obra.fuente.modelo, aspiracion: obra.fuente.aspiracion }
       : { tipo: 'presion', bar: obra.fuente.bar },
-    alimentacion: s.alimentacion, valvula: s.valvula, lateral: s.lateral,
-    aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura })),
+    alimentacion: s.alimentacion, valvula: s.valvula, lateral: s.lateral, manguera: s.manguera || null,
+    aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura, manguera: a.manguera || 0 })),
     accesorios: obra.accesorios,
   });
 

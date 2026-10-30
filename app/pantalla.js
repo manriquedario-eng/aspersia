@@ -232,11 +232,12 @@
       const c = calcular(s);
       L.push('');
       L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
-      L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm.`);
+      L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm, con tapón al final. ` +
+        `Cada aspersor sale del caño con conector inicial, manguera ${R.MANGUERAS[s.manguera || 'pe-12'].nombre} (hasta 6 m) y espiga en L.`);
       if (c.error) { L.push(`Error de cálculo: ${c.error}`); return; }
       c.r.aspersores.forEach((a, i) => {
         const asp = s.aspersores[i];
-        L.push(`  ${a.n}. ${a.emisor.tipo} ${a.emisor.nombre}${a.regulador ? ` en cuerpo ${a.regulador}` : ''} · a ${fmt(asp.distancia, 1)} m del anterior · ` +
+        L.push(`  ${a.n}. ${a.emisor.tipo} ${a.emisor.nombre}${a.regulador ? ` en cuerpo ${a.regulador}` : ''} · a ${fmt(asp.distancia, 1)} m del anterior por el caño · ${a.manguera > 0 ? `${fmt(a.manguera, 1)} m de manguera (pierde ${fmt(a.perdidaManguera, 2)} bar)` : 'directo al caño'} · ` +
           `${fmt(a.presionBoquilla, 2)} bar en la boquilla · ${fmt(a.caudal, 2)} l/min · alcance ${fmt(a.radio, 1)} m` +
           (asp.x != null ? ` · posición (${fmt(asp.x, 1)}; ${fmt(asp.y, 1)}) m, giro ${Math.round(asp.giro || 0)}°` : ''));
       });
@@ -470,6 +471,7 @@
     campo('distancia').value = a.distancia;
     campo('distancia').disabled = usaPlano();
     campo('altura').value = a.altura;
+    campo('manguera').value = a.manguera ?? 0;
     li.querySelector('.numero').textContent = i + 1;
     li.querySelector('[data-texto=distancia]').textContent = (i ? 'Distancia al anterior' : 'Distancia a la válvula') + (usaPlano() ? ' (del plano)' : '');
     li.querySelector('.resumen').textContent = arcoInvalido ? `${a.tipo} ${a.boquilla}: arco de ${a.arco}° no válido`
@@ -480,7 +482,7 @@
     const n = ev.target.dataset.campo;
     if (!li || !n) return;
     const i = Number(li.dataset.i), a = sector().aspersores[i];
-    if (n === 'distancia' || n === 'altura') a[n] = decimal(ev.target.value);
+    if (n === 'distancia' || n === 'altura' || n === 'manguera') a[n] = decimal(ev.target.value);
     else if (n === 'arcoLibre') {
       const v = decimal(ev.target.value);
       if (v < 1 || v > 360) return;
@@ -539,7 +541,13 @@
     if (r.alimentacion) recorrido.push(`Caño hasta la válvula (${r.alimentacion.cano}, ${fmt(r.alimentacion.largo, 0)} m): pierde ${fmt(r.alimentacion.perdida, 2)} bar, el agua va a ${fmt(r.alimentacion.velocidad, 2)} m/s`);
     recorrido.push(`Llega a la válvula con <b>${fmt(r.presionValvula, 2)} bar</b>`);
     if (sector().valvula) recorrido.push(`La PGV de 1" pierde ${fmt(r.perdidaValvula, 2)} bar → sale con <b>${fmt(r.presionSalidaValvula, 2)} bar</b>`);
-    const hayReg = r.aspersores.some(a => a.regulador);
+    const conManguera = r.aspersores.filter(a => a.manguera > 0);
+    if (conManguera.length) {
+      const pm = conManguera.map(a => a.perdidaManguera);
+      recorrido.push(`Conector inicial, manguera y espiga de cada aspersor: pierden ${fmt(Math.min(...pm), 2)}${Math.max(...pm) - Math.min(...pm) >= 0.005 ? ` a ${fmt(Math.max(...pm), 2)}` : ''} bar`);
+    }
+    // "Entra" es la presión en la entrada del cuerpo (después de la manguera); se muestra si difiere de la boquilla o del caño.
+    const hayReg = r.aspersores.some(a => a.regulador) || conManguera.length > 0;
     const filasAsp = r.aspersores.map((a, i) => `<tr>
       <td class="nombre">${a.n}. ${escapar(a.emisor.nombre)}${a.regulador ? ' · ' + a.regulador : ''}</td>
       ${hayReg ? `<td>${fmt(a.presionEntrada, 2)}</td>` : ''}
@@ -748,6 +756,7 @@
     ['Cuerpos y turbinas', c => c.startsWith('cuerpo-') || c.startsWith('turbina-')],
     ['Boquillas', c => c.startsWith('boq-')],
     ['Caños', c => c.startsWith('cano-')],
+    ['Manguera y conexiones', c => /^(manguera|conector|espiga|tapon|pegamento|conexion)-/.test(c)],
     ['Válvulas, caja y programador', c => /^(valvula|caja|programador)/.test(c)],
     ['Bombas', c => c.startsWith('bomba-')],
     ['Conexiones', c => true],

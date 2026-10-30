@@ -14,8 +14,14 @@
   const VELOCIDAD_MAX = 1.5;     // m/s, la que marcan como límite las tablas de Hunter
   const VARIACION_MAX = 20;      // % de diferencia de presión admitida dentro del sector
 
-  // Caños: diámetro interior por tamaño nominal. Hunter, págs. 215, 216, 219 y 220.
+  // Caños: diámetro interior por tamaño nominal (diámetro exterior).
+  // PVC K6 Tigre: catálogo Tigre "Agua Fría", pág. 10, "Tubo soldable PVC CL 6": exterior menos dos espesores
+  // (40 → 1,3 mm; 50 → 1,7; 63 → 1,9; 75 → 2,2; lo confirma el catálogo "Redes de Agua", pág. 19).
+  // La tabla de clase 6 empieza en 40 mm: para 32 mm se usa el espesor de clase 10 (1,6 mm), del lado seguro.
+  // El resto, de las tablas de Hunter, págs. 215, 216, 219 y 220.
   const CANOS = {
+    'pvc-k6':    { nombre: 'PVC K6', detalle: 'PVC clase 6 junta pegada (Tigre)', C: 150, pagina: 'Tigre, Agua Fría pág. 10',
+      di: { 32: 28.8, 40: 37.4, 50: 46.6, 63: 59.2, 75: 70.6 } },
     'pead-pn6':  { nombre: 'PEAD PN6', detalle: 'Polietileno PEAD PN6 (SDR 17,6)', C: 140, pagina: 219,
       di: { 25: 21.4, 32: 28.4, 40: 35.4, 50: 44.2, 63: 55.8, 75: 66.4, 90: 79.8, 110: 97.4 } },
     'pead-pn10': { nombre: 'PEAD PN10', detalle: 'Polietileno PEAD PN10 (SDR 11)', C: 140, pagina: 220,
@@ -25,6 +31,16 @@
     'pvc-c5':    { nombre: 'PVC clase 5', detalle: 'PVC clase 5 (16 bar)', C: 150, pagina: 216,
       di: { 25: 21.2, 32: 27.2, 40: 34.0, 50: 42.6, 63: 53.6, 75: 63.8, 90: 76.6, 110: 93.6 } },
   };
+
+  // Manguera de polietileno que va del conector inicial (en el caño del ramal) a la espiga en L de cada aspersor.
+  // La de ½" y la de 16 mm se usan igual (Darío): un solo tipo. No se encontró la ficha del fabricante:
+  // el diámetro interior es aproximado (≈ 13 mm). Conector inicial + espiga en L se cuentan como 1 m más
+  // de manguera (estimado). Darío: hasta 6 m de manguera por aspersor.
+  const MANGUERAS = {
+    'pe-12': { nombre: 'Polietileno K4 de ½" o 16 mm', corto: '½"', di: 13.0, C: 140 },
+  };
+  const ACCESORIOS_MANGUERA_M = 1;
+  const MANGUERA_MAX_M = 6;
 
   // Interpolación lineal. "fuera" = -1 si x queda debajo de la tabla, 1 si queda arriba, 0 si está dentro.
   // Fuera de la tabla devuelve el valor del extremo (no extrapola).
@@ -168,9 +184,11 @@
   //   alimentacion: { material, nominal, largo, desnivel },   // de la fuente a la válvula; desnivel en m (+ si la válvula está más alta)
   //   valvula: true | false,                                    // electroválvula PGV de 1"
   //   lateral: { material, nominal },                           // caño del sector, después de la válvula
-  //   aspersores: [{ emisor, regulador: null | 'PRS30' | 'PRS40', distancia, altura }],
+  //   manguera: 'pe-12' | null,                                 // manguera del conector inicial a cada aspersor
+  //   aspersores: [{ emisor, regulador: null | 'PRS30' | 'PRS40', distancia, altura, manguera }],
   //       distancia: metros de caño desde el punto anterior (la válvula o el aspersor anterior)
   //       altura: metros respecto de la válvula (+ más alto)
+  //       manguera: metros de manguera desde el conector inicial hasta la espiga del aspersor (0 = va directo al caño)
   //   accesorios: 10,                                           // % que se suma a la fricción por codos y tes
   // }
   function calcularSector(sector) {
@@ -180,10 +198,13 @@
       ? { ...cano(sector.alimentacion.material, sector.alimentacion.nominal), largo: sector.alimentacion.largo, desnivel: sector.alimentacion.desnivel || 0 }
       : null;
     const lat = cano(sector.lateral.material, sector.lateral.nominal);
+    const mang = sector.manguera ? MANGUERAS[sector.manguera] : null;
+    if (sector.manguera && !mang) throw new Error('Manguera desconocida: ' + sector.manguera);
     const asps = sector.aspersores.map((a, i) => ({
       ...a, n: i + 1, e: emisor(a.emisor),
       reg: a.regulador ? REGULACION[a.regulador] : null,
       distancia: a.distancia || 0, altura: a.altura || 0,
+      manguera: mang ? Math.max(0, a.manguera || 0) : 0,
     }));
     if (!asps.length) throw new Error('El sector no tiene aspersores');
     const pump = sector.fuente.tipo === 'bomba' ? bomba(sector.fuente.linea, sector.fuente.modelo) : null;
@@ -225,11 +246,16 @@
         p -= friccion + (a.altura - alturaAnterior) / MCA_POR_BAR;
         alturaAnterior = a.altura;
         tramos.push({ hasta: a.n, largo: a.distancia, caudal: qTramo, perdida: friccion, velocidad: velocidad(qTramo, lat.di) });
-        const pBoquilla = a.reg != null ? Math.min(p, a.reg) : p;
+        // Derivación al aspersor: conector inicial + manguera + espiga en L. Pierde solo con el caudal de ese
+        // aspersor y no cambia la presión del caño para los que siguen.
+        const perdManguera = a.manguera > 0 ? perdidaCano(caudales[i], a.manguera + ACCESORIOS_MANGUERA_M, mang.di, mang.C) : 0;
+        const pEntrada = p - perdManguera;
+        const pBoquilla = a.reg != null ? Math.min(pEntrada, a.reg) : pEntrada;
         const c = interpolar(a.e.presiones, a.e.caudales, pBoquilla);
         const r = interpolar(a.e.presiones, a.e.radios, pBoquilla);
-        asp.push({ n: a.n, emisor: a.e, regulador: a.regulador || null, presionEntrada: p, presionBoquilla: pBoquilla,
-          caudal: c.valor, radio: r.valor, fuera: c.fuera });
+        asp.push({ n: a.n, emisor: a.e, regulador: a.regulador || null, presionCano: p, presionEntrada: pEntrada, presionBoquilla: pBoquilla,
+          caudal: c.valor, radio: r.valor, fuera: c.fuera,
+          manguera: a.manguera, perdidaManguera: perdManguera, velocidadManguera: a.manguera > 0 ? velocidad(caudales[i], mang.di) : 0 });
       }
       return { total, pFuente, alturaBomba, perdAlim, pValvula, perdValv, pSalidaValvula, tramos, asp };
     }
@@ -268,6 +294,16 @@
       const nums = g.lista.map(a => a.n);
       const quien = nums.length === 1 ? `Aspersor ${nums[0]}` : `Aspersores ${nums.join(', ')}`;
       avisos.push({ nivel: g.nivel, texto: g.armar(g.lista, quien) });
+    }
+    const mangLargas = r.asp.filter(a => a.manguera > MANGUERA_MAX_M);
+    if (mangLargas.length) {
+      const nums = mangLargas.map(a => a.n);
+      avisos.push({ nivel: 'aviso', texto: `${nums.length === 1 ? 'Aspersor' : 'Aspersores'} ${nums.join(', ')}: ${rango(mangLargas, 'manguera')} m de manguera, más de los ${MANGUERA_MAX_M} m que se usan como máximo por aspersor. Conviene acercar el caño.` });
+    }
+    const mangRapidas = r.asp.filter(a => a.velocidadManguera > VELOCIDAD_MAX);
+    if (mangRapidas.length) {
+      const nums = mangRapidas.map(a => a.n);
+      avisos.push({ nivel: 'aviso', texto: `${nums.length === 1 ? 'Aspersor' : 'Aspersores'} ${nums.join(', ')}: por la manguera de ${mang.corto} el agua va a ${rango(mangRapidas, 'velocidadManguera')} m/s y pierde ${rango(mangRapidas, 'perdidaManguera')} bar. Conviene manguera más grande, o conectar${nums.length === 1 ? 'lo' : 'los'} directo al caño.` });
     }
     const rapidos = r.tramos.filter(t => t.velocidad > VELOCIDAD_MAX);
     if (rapidos.length) avisos.push({ nivel: 'aviso', texto: `El agua va a más de ${fmt(VELOCIDAD_MAX, 1)} m/s en ${rapidos.length === 1 ? 'el tramo hasta el aspersor ' + rapidos[0].hasta : rapidos.length + ' tramos'}: conviene un caño más grande.` });
@@ -315,7 +351,7 @@
   }
 
   global.RIEGO = {
-    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
+    MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, MANGUERAS, ACCESORIOS_MANGUERA_M, MANGUERA_MAX_M, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
     interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
