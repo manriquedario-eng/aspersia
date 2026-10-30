@@ -353,7 +353,6 @@ ol.pasos li { margin: 4px 0; }
 .rosa .rosa-s { fill: #94a3b8; }
 .rosa text { font-size: 9px; font-weight: 800; text-anchor: middle; fill: #13233a; }
 .capas { flex-wrap: wrap; }
-.etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
 .capas { margin-top: 10px; }
 /* Opción elegida en los botones del panel del plano (arco, altura) */
 .giros .chico.activo { border-color: var(--primario); background: var(--primario-claro); color: var(--primario); font-weight: 700; }

@@ -226,8 +226,8 @@
     if (!f) return;
     $('fondo-opacidad').value = f.opacidad ?? 70;
     $('fondo-estado').textContent = f.escala
-      ? `Escalada: entre A y B ${fmt(f.escala.metros, 1)} m. La imagen mide ${fmt(f.ancho, 1)} × ${fmt(f.alto, 1)} m.`
-      : 'Todavía sin escalar: las medidas son aproximadas hasta que la escales con una medida real.';
+      ? `Escalada con una medida real de ${fmt(f.escala.metros, 1)} m. La imagen mide ${fmt(f.ancho, 1)} × ${fmt(f.alto, 1)} m.`
+      : 'Todavía sin escalar: las medidas son aproximadas. Dibujá la zona a regar y escribí cuánto mide un lado.';
   }
 
   async function achicarImagen(archivo) {
@@ -303,9 +303,12 @@
   });
   const medidaTerreno = (campo, v) => {
     obra.plano[campo] = Math.max(1, Math.min(500, decimal(v)));
-    for (const s of obra.sectores) for (const p of [s.valvulaPos, ...s.aspersores]) if (p) {
-      p.x = Math.min(obra.plano.ancho, p.x ?? 0); p.y = Math.min(obra.plano.largo, p.y ?? 0);
-    }
+    // Lo que quedó afuera del terreno nuevo se trae al borde (los aspersores sin ubicar siguen sin ubicar)
+    const t = obra.plano;
+    const adentro = p => { if (p && p.x != null && p.y != null) { p.x = Math.min(t.ancho, p.x); p.y = Math.min(t.largo, p.y); } };
+    adentro(t.fuente);
+    for (const s of obra.sectores) [s.valvulaPos, ...s.aspersores, ...(s.ramal || [])].forEach(adentro);
+    for (const z of t.zonas || []) z.forEach(adentro);
     sincronizarDistancias(); guardar();
     PLANO.iniciar({ ...planoActual() });
   };
@@ -358,14 +361,14 @@
     obra.sectores.forEach((s, k) => {
       const c = calcular(s);
       L.push('');
-      L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
+      L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie && !O.superficieZonas(obra) ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
       L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm, con tapón al final. ` +
         `Cada aspersor sale del caño con conector inicial, manguera ${R.MANGUERAS[s.manguera || 'pe-12'].nombre} (hasta 6 m) y espiga en L.`);
       if (O.tieneRamal(s)) L.push(`Caño principal dibujado en el plano: ${fmt(O.largoRamal(s), 1)} m con ${O.codosRamal(s)} codo(s), por los puntos ${[s.valvulaPos, ...s.ramal].map(p => `(${fmt(p.x, 1)}; ${fmt(p.y, 1)})`).join(' → ')}. La manguera de cada aspersor va en línea recta hasta el caño.`);
       if (c.error) { L.push(`Error de cálculo: ${c.error}`); return; }
       c.r.aspersores.forEach((a, i) => {
         const asp = s.aspersores[i];
-        L.push(`  ${a.n}. ${a.emisor.tipo} ${a.emisor.nombre}${a.regulador ? ` en cuerpo ${a.regulador}` : ''} · a ${fmt(asp.distancia, 1)} m del anterior por el caño · ${a.manguera > 0 ? `${fmt(a.manguera, 1)} m de manguera (pierde ${fmt(a.perdidaManguera, 2)} bar)` : 'directo al caño'} · ` +
+        L.push(`  ${a.n}. ${a.emisor.tipo} ${a.emisor.nombre}${a.regulador ? ` en cuerpo ${a.regulador}` : ''} · a ${fmt(asp.distancia, 1)} m ${i ? "del anterior" : "de la válvula"} por el caño${asp.x == null ? " (sin ubicar en el plano)" : ""} · ${a.manguera > 0 ? `${fmt(a.manguera, 1)} m de manguera (pierde ${fmt(a.perdidaManguera, 2)} bar)` : 'directo al caño'} · ` +
           `${fmt(a.presionBoquilla, 2)} bar en la boquilla · ${fmt(a.caudal, 2)} l/min · alcance ${fmt(a.radio, 1)} m` +
           (asp.x != null ? ` · posición (${fmt(asp.x, 1)}; ${fmt(asp.y, 1)}) m, giro ${Math.round(asp.giro || 0)}°` : ''));
       });
@@ -540,8 +543,9 @@
   $('copiar-sector').addEventListener('click', () => {
     const copia = JSON.parse(JSON.stringify(sector()));
     copia.nombre = `${sector().nombre} (copia)`;
-    // En el plano la copia no va encima del original: queda sin ubicar y se acomoda en una fila propia.
-    delete copia.valvulaPos;
+    // En el plano la copia no va encima del original: los aspersores quedan sin ubicar, la válvula se ubica sola
+    // y el caño principal se dibuja de nuevo.
+    delete copia.valvulaPos; delete copia.ramal;
     for (const a of copia.aspersores) { delete a.x; delete a.y; }
     obra.sectores.splice(nSector + 1, 0, copia);
     if (obra.plano) window.GEOMETRIA.ubicarSinPosicion(obra.plano, obra.sectores);
@@ -667,9 +671,12 @@
     if (c.error) { caja.innerHTML = `<ul class="avisos"><li class="error">${escapar(c.error)}</li></ul>`; return; }
     const { r, rec } = c;
     const estimada = P.superficieEstimada(r, sector().aspersores);
-    $('superficie-ayuda').textContent = sector().superficie
-      ? `Según los aspersores serían unos ${fmt(estimada, 0)} m².`
-      : `Si la dejás vacía se usan unos ${fmt(estimada, 0)} m², estimados con el alcance de los aspersores.`;
+    const zonas = O.superficieZonas(obra);
+    $('superficie-ayuda').textContent = zonas
+      ? `La mano de obra usa la zona a regar dibujada en el plano: ${fmt(zonas, 0)} m² en toda la obra. Este dato no se usa mientras haya zona dibujada.`
+      : sector().superficie
+        ? `Según los aspersores serían unos ${fmt(estimada, 0)} m².`
+        : `Si la dejás vacía se usan unos ${fmt(estimada, 0)} m², estimados con el alcance de los aspersores.`;
     const lpm = r.caudalTotal;
     const pMin = Math.min(...r.aspersores.map(a => a.presionBoquilla));
     const avisos = r.avisos.length
