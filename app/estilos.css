@@ -370,3 +370,11 @@ ol.pasos li { margin: 4px 0; }
 .rosa text { font-size: 9px; font-weight: 800; text-anchor: middle; fill: #13233a; }
 .capas, #sol-epoca { flex-wrap: wrap; }
 .capas { margin-top: 10px; }
+/* Tarjeta plegable (Sol y sombra: opcional, cerrada mientras no se use) */
+.plegable > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.plegable > summary::-webkit-details-marker { display: none; }
+.plegable > summary::after { content: '▸'; color: var(--primario); font-size: 1.1rem; transition: transform .2s; }
+.plegable[open] > summary::after { transform: rotate(90deg); }
+.plegable > summary h2 { margin: 0; }
+.plegable[open] > summary { margin-bottom: 8px; }
+.opcional { font-size: .8rem; font-weight: 500; color: var(--suave); }

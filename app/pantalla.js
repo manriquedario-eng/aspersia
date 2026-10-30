@@ -9,6 +9,14 @@
   const R = window.RIEGO, P = window.PRESUPUESTO, A = window.ALMACEN, C = window.CZERWENY;
   const $ = id => document.getElementById(id);
   const fmt = R.fmt;
+  // Qué teléfono es: cambia dónde se guarda la copia (iCloud en el iPhone, Google Drive en Android) y algunos textos.
+  // Chrome en el iPhone también es iPhone (usa el mismo motor que Safari).
+  const EQUIPO = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'iphone'
+    : /Android/.test(navigator.userAgent) ? 'android' : 'otro';
+  const NUBE = { iphone: 'iCloud', android: 'Google Drive', otro: 'la nube' }[EQUIPO];
+  document.querySelectorAll('[data-equipo]').forEach(e => { e.hidden = e.dataset.equipo !== EQUIPO; });
+  document.querySelectorAll('[data-nube]').forEach(b => { b.textContent = EQUIPO === 'otro' ? 'Guardar copia (descargar archivo)' : `Guardar copia en ${NUBE}`; });
+  document.querySelectorAll('[data-nube-nombre]').forEach(e => { e.textContent = EQUIPO === 'otro' ? 'tu computadora' : NUBE; });
 
   const datos = await A.abrir();
   let obra = null;          // obra abierta
@@ -26,11 +34,11 @@
     if (document.querySelector('.aviso-flotante')) return;
     const d = document.createElement('div');
     d.className = 'aviso-flotante';
-    d.textContent = 'No se pudo guardar en el teléfono: lo último que cambiaste no quedó guardado. Revisá que el iPhone tenga lugar libre (Configuración › General › Almacenamiento) y guardá una copia de seguridad en iCloud.';
+    d.textContent = 'No se pudo guardar en el teléfono: lo último que cambiaste no quedó guardado. Revisá que el teléfono tenga lugar libre y guardá una copia de seguridad en ' + NUBE + '.';
     document.body.appendChild(d);
     setTimeout(() => d.remove(), 12000);
   }
-  // En el iPhone la app puede cerrarse sin aviso al pasar a otra: se guarda también cuando deja de verse.
+  // En el teléfono la app puede cerrarse sin aviso al pasar a otra: se guarda también cuando deja de verse.
   window.addEventListener('pagehide', () => A.guardar(datos));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') A.guardar(datos); });
 
@@ -203,6 +211,8 @@
     $('plano-distancias').checked = usaPlano();
     obra.plano.latitud ??= datos.latitud ?? LATITUD_INICIAL;
     pintarSol();
+    // Sol y sombra es opcional: la tarjeta queda cerrada hasta que se use.
+    $('sol-caja').open = obra.plano.sombras.length > 0 || obra.plano.verSol;
     pintarFondo();
     guardar();
     PLANO.iniciar(planoActual());
@@ -357,7 +367,7 @@
       obra.plano.latitud = datos.latitud = Math.round(pos.coords.latitude * 100) / 100;
       res.textContent = `Listo: latitud ${fmt(obra.plano.latitud, 2)}°. Queda guardada también para las obras nuevas.`;
       guardar(); pintarSol(); PLANO.pintar();
-    }, () => { res.textContent = 'No se pudo saber la ubicación. Revisá que Safari tenga permiso (Configuración › Privacidad › Localización) o escribí la latitud.'; },
+    }, () => { res.textContent = `No se pudo saber la ubicación. Revisá que ${EQUIPO === 'android' ? 'Chrome' : 'el navegador'} tenga permiso de ubicación o escribí la latitud.`; },
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 3600000 });
   });
 
@@ -1001,8 +1011,8 @@
     const dias = datos.cambiosSinCopia ? A.diasDesde(datos.cambiosSinCopia) : 0;
     $('recordar-copia').hidden = dias < DIAS_RECORDAR;
     $('recordar-copia-texto').textContent = datos.ultimaCopia
-      ? `Hace ${A.diasDesde(datos.ultimaCopia)} días que no guardás una copia en iCloud y desde entonces cambiaste cosas.`
-      : 'Todavía no guardaste ninguna copia de tus obras en iCloud.';
+      ? `Hace ${A.diasDesde(datos.ultimaCopia)} días que no guardás una copia en ${NUBE} y desde entonces cambiaste cosas.`
+      : `Todavía no guardaste ninguna copia de tus obras en ${NUBE}.`;
   }
   async function guardarCopia() {
     const archivo = new File([A.exportar(datos)], `Aspersia copia ${A.hoy()}.json`, { type: 'application/json' });

@@ -1,7 +1,7 @@
 // Modo sin señal: guarda la app en el teléfono la primera vez y después la abre desde ahí.
 // Cuando hay señal, baja en segundo plano la versión nueva, que se ve la próxima vez que se abre.
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
-const VERSION = 'aspersia-v12';
+const VERSION = 'aspersia-v13';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -25,10 +25,10 @@ const ARCHIVOS = [
   'datos/czerweny.js',
   'app/marca/marca.png',
   'app/marca/logo-pdf.png',
-  'app/iconos/icono-180.png',
-  'app/iconos/icono-192.png',
-  'app/iconos/icono-512.png',
-  'app/iconos/icono-maskable-512.png',
+  'app/iconos/aspersia-180.png',
+  'app/iconos/aspersia-192.png',
+  'app/iconos/aspersia-512.png',
+  'app/iconos/aspersia-maskable-512.png',
 ];
 
 self.addEventListener('install', ev => {

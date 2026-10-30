@@ -3,14 +3,15 @@
   "short_name": "Aspersia",
   "description": "Diseño, cálculo y presupuesto de riego por aspersión con aspersores Hunter y bombas Czerweny.",
   "lang": "es-AR",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0b4a8f",
   "icons": [
-    { "src": "app/iconos/icono-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "app/iconos/icono-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "app/iconos/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "app/iconos/aspersia-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "app/iconos/aspersia-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "app/iconos/aspersia-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

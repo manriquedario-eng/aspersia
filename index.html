@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Aspersia · Riegos Tecnológicos</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="app/iconos/icono-180.png">
-<link rel="icon" type="image/png" href="app/iconos/icono-192.png">
+<link rel="apple-touch-icon" href="app/iconos/aspersia-180.png">
+<link rel="icon" type="image/png" href="app/iconos/aspersia-192.png">
 <link rel="stylesheet" href="app/estilos.css">
 </head>
 <body>
@@ -30,7 +30,7 @@
   <div id="vista-inicio" class="vista">
     <section id="recordar-copia" class="tarjeta recordar" hidden>
       <p id="recordar-copia-texto"></p>
-      <button id="recordar-copia-boton" class="principal lleno ancho" type="button">Guardar copia en iCloud</button>
+      <button id="recordar-copia-boton" class="principal lleno ancho" type="button" data-nube>Guardar copia</button>
     </section>
     <section class="tarjeta">
       <h2>Obras</h2>
@@ -167,8 +167,9 @@
       </section>
 
       <section class="tarjeta">
-        <h2>Sol y sombra</h2>
-        <p class="ayuda arriba">Para ver qué partes del jardín tienen más sol. Tocá qué querés marcar y después tocá sobre el plano.</p>
+        <details id="sol-caja" class="plegable">
+        <summary><h2>Sol y sombra <span class="opcional">· opcional</span></h2></summary>
+        <p class="ayuda arriba">Si querés ver qué partes del jardín tienen más sol, marcá lo que hace sombra: tocá qué querés marcar y después tocá sobre el plano. Si no marcás nada, el diseño funciona igual.</p>
         <div class="botones-sombra">
           <button type="button" class="boton" data-marcar="casa">+ Casa</button>
           <button type="button" class="boton" data-marcar="muro">+ Muro</button>
@@ -189,6 +190,7 @@
             <input id="sol-latitud" type="number" inputmode="decimal" step="0.1" min="-60" max="60"></label>
           <button id="sol-gps" class="chico" type="button">Usar la ubicación del teléfono</button>
           <p id="sol-gps-resultado" class="ayuda"></p>
+        </details>
         </details>
       </section>
 
@@ -268,7 +270,7 @@
         <button id="ver-pdf" class="principal" type="button">Ver PDF</button>
         <button id="enviar-pdf" class="principal lleno" type="button">Enviar al cliente</button>
       </div>
-      <p class="ayuda centro" id="aviso-envio">"Enviar al cliente" arma el PDF, abre WhatsApp o el correo del iPhone y deja el presupuesto como Enviado.</p>
+      <p class="ayuda centro" id="aviso-envio">"Enviar al cliente" arma el PDF, abre WhatsApp o el correo del teléfono y deja el presupuesto como Enviado.</p>
     </div>
   </div>
 
@@ -356,18 +358,24 @@
     <section class="tarjeta">
       <h2>Copia de seguridad</h2>
       <p>Todo lo que cargás queda guardado en este teléfono. Si se rompe o lo cambiás, sin copia se pierde.</p>
-      <p>La copia es un solo archivo con todas las obras, precios, tus datos y las fotos de fondo. Guardala en tu iCloud:</p>
-      <ol class="pasos">
+      <p>La copia es un solo archivo con todas las obras, precios, tus datos y las fotos de fondo. Guardala en la nube:</p>
+      <ol class="pasos" data-equipo="iphone">
         <li>Tocá <b>Guardar copia en iCloud</b>.</li>
         <li>En el menú que aparece, elegí <b>Guardar en Archivos</b>.</li>
         <li>Elegí <b>iCloud Drive</b> (si querés, una carpeta "Aspersia") y tocá <b>Guardar</b>.</li>
       </ol>
-      <button id="exportar" class="principal lleno ancho" type="button">Guardar copia en iCloud</button>
+      <ol class="pasos" data-equipo="android">
+        <li>Tocá <b>Guardar copia en Google Drive</b>.</li>
+        <li>En el menú que aparece, elegí <b>Drive</b>.</li>
+        <li>Elegí la carpeta (si querés, una "Aspersia") y tocá <b>Guardar</b>.</li>
+      </ol>
+      <p class="ayuda" data-equipo="otro">En la computadora la copia se descarga como archivo: guardala en la nube que uses.</p>
+      <button id="exportar" class="principal lleno ancho" type="button" data-nube>Guardar copia</button>
       <p class="ayuda" id="copia-info"></p>
     </section>
     <section class="tarjeta">
       <h2>Recuperar una copia</h2>
-      <p class="ayuda arriba">Elegí el archivo en iCloud Drive. Reemplaza todo lo que hay ahora en el teléfono por lo de la copia (lo de ahora queda guardado aparte por las dudas). Sirve también para pasar todo a un teléfono nuevo.</p>
+      <p class="ayuda arriba">Elegí el archivo de copia en <span data-nube-nombre>la nube</span>. Reemplaza todo lo que hay ahora en el teléfono por lo de la copia (lo de ahora queda guardado aparte por las dudas). Sirve también para pasar todo a un teléfono nuevo.</p>
       <label class="principal ancho archivo">Elegir archivo de copia
         <input id="importar" type="file" accept="application/json,.json"></label>
       <p id="importar-resultado" class="ayuda"></p>
