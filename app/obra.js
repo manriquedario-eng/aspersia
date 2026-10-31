@@ -170,8 +170,38 @@
   // Diámetro del caño en el tramo que llega a cada aspersor (escalonado o el mismo para todos), para el plano.
   const diametrosDelSector = (obra, s) => { const lat = paraCalcular(obra)(s).lateral; return s.aspersores.map((a, i) => lat.tramos?.[i] ?? lat.nominal); };
 
+  // ---------- Caja: cobros, gastos y ganancia ----------
+  // Cada obra guarda lo que pagó el cliente (cobros) y lo que se gastó en ella (gastos: materiales, combustible, todo).
+  // Ganancia = cobrado − gastado. Se reparte en partes iguales entre los socios (Darío y Leandro).
+  const sumaImportes = lista => (lista || []).reduce((t, x) => t + (Number(x.importe) || 0), 0);
+  function cajaDeObra(obra, precios) {
+    let total = 0;
+    try { total = presupuesto(obra, precios).total || 0; } catch { /* obra con error: sin total */ }
+    const cobrado = sumaImportes(obra.cobros), gastado = sumaImportes(obra.gastos);
+    const ganancia = cobrado - gastado;
+    return { total, cobrado, falta: Math.max(0, total - cobrado), gastado, ganancia,
+      gananciaPrevista: Math.max(total, cobrado) - gastado,
+      margen: cobrado > 0 ? ganancia / cobrado * 100 : null };
+  }
+  // Por mes (AAAA-MM, según la fecha de cada cobro y cada gasto), con el acumulado desde el primer mes.
+  function cajaPorMes(obras) {
+    const meses = new Map();
+    const mes = f => (f || '').slice(0, 7) || 'sin fecha';
+    const de = m => { if (!meses.has(m)) meses.set(m, { mes: m, cobrado: 0, gastado: 0 }); return meses.get(m); };
+    for (const o of obras) {
+      for (const c of o.cobros || []) de(mes(c.fecha)).cobrado += Number(c.importe) || 0;
+      for (const g of o.gastos || []) de(mes(g.fecha)).gastado += Number(g.importe) || 0;
+    }
+    let acumulado = 0;
+    return [...meses.values()].sort((a, b) => a.mes.localeCompare(b.mes)).map(m => {
+      m.ganancia = m.cobrado - m.gastado;
+      acumulado += m.ganancia;
+      return { ...m, acumulado };
+    });
+  }
+
   // Superficie de las zonas a regar dibujadas en el plano (m²), o null si no hay ninguna.
   const superficieZonas = obra => obra.plano?.zonas?.length ? obra.plano.zonas.reduce((t, z) => t + global.GEOMETRIA.areaPoligono(z), 0) : null;
 
-  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, cajaDeObra, cajaPorMes, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

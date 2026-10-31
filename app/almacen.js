@@ -21,20 +21,23 @@
     manguera: 'pe-12',
     aspersores: [],   // sin fila de ejemplo (Darío): se agregan en el plano con "+ Aspersor" o en Diseño
   });
-  function obraNueva(datos) {
+  // tipo: 'riego' (diseño completo por aspersión) o 'mantenimiento' (reparación: horas de trabajo y materiales).
+  function obraNueva(datos, tipo = 'riego') {
     const numero = datos.siguienteNumero++;
+    const mant = tipo === 'mantenimiento';
     return {
       id: nuevoId(), creada: hoy(), actualizada: hoy(), estado: 'Borrador',
-      nombre: '',
+      tipo, nombre: '', trabajo: '', horas: mant ? 1 : 0,
+      cobros: [], gastos: [],   // lo que pagó el cliente y lo que se gastó en la obra (caja)
       cliente: { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' },
       fuente: { tipo: 'presion', bar: 3, linea: 'ZETA', modelo: 'ZETA 2', aspiracion: 0 },
       accesorios: 10,
-      sectores: [sectorNuevo(1)],
+      sectores: mant ? [] : [sectorNuevo(1)],
       plano: planoNuevo(),
       presupuesto: {
         numero, fecha: hoy(), validez: 15,
-        formaPago: '50 % al aceptar y 50 % al terminar la obra.',
-        notas: 'Incluye materiales, instalación, puesta en marcha y programación.',
+        formaPago: mant ? 'Al terminar el trabajo.' : '50 % al aceptar y 50 % al terminar la obra.',
+        notas: mant ? 'Incluye la mano de obra y los materiales detallados.' : 'Incluye materiales, instalación, puesta en marcha y programación.',
         desperdicio: 10, descuento: 0, iva: false, cambios: {}, propios: [], congelado: null,
       },
     };
@@ -69,6 +72,9 @@
   function completar(datos) {
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
+      o.tipo ??= 'riego';
+      o.cobros ??= [];
+      o.gastos ??= [];
       o.plano ||= planoNuevo();
       o.plano.zonas ??= [];          // zonas a regar dibujadas sobre la foto
       o.plano.norte ??= 0;           // rumbo del norte en el plano (0 = arriba, como Google Maps)

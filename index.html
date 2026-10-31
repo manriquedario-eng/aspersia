@@ -35,9 +35,13 @@
     <section class="tarjeta">
       <h2>Obras</h2>
       <ul id="lista-obras" class="sectores"></ul>
-      <button id="nueva-obra" class="boton" type="button">+ Nueva obra</button>
+      <div class="botones-plano">
+        <button id="nueva-obra" class="boton" type="button">+ Obra de riego</button>
+        <button id="nuevo-mantenimiento" class="boton" type="button">+ Mantenimiento</button>
+      </div>
     </section>
     <nav class="menu">
+      <a href="#/caja" class="menu-item"><b>Caja</b><span>Cobros, gastos y ganancia de cada mes</span></a>
       <a href="#/precios" class="menu-item"><b>Lista de precios</b><span>Lo que cobrás por cada material y por m²</span></a>
       <a href="#/datos" class="menu-item"><b>Mis datos</b><span>Lo que sale arriba en tus presupuestos</span></a>
       <a href="#/copia" class="menu-item"><b>Copia de seguridad</b><span>Guardá o recuperá todas tus obras</span></a>
@@ -52,6 +56,7 @@
       <a role="tab" data-pestana="diseno">Diseño</a>
       <a role="tab" data-pestana="plano">Plano</a>
       <a role="tab" data-pestana="presupuesto">Presupuesto</a>
+      <a role="tab" data-pestana="cobros">Cobros</a>
     </div>
 
     <!-- Cliente -->
@@ -73,6 +78,7 @@
         <div class="campos">
           <label>Nombre de la obra <input id="obra-nombre" type="text" autocomplete="off" placeholder="Casa Pérez"></label>
           <label>Estado <select id="obra-estado"></select></label>
+          <label id="trabajo-caja" hidden>Trabajo realizado <textarea id="obra-trabajo" rows="3" placeholder="Reparación de la conexión de la bomba, cambio de dos toberas…"></textarea></label>
         </div>
         <p class="ayuda">Al pasar a Enviado o Aceptado, el presupuesto queda cerrado: ya no cambia si tocás el diseño o los precios.</p>
         <div class="acciones">
@@ -218,6 +224,10 @@
           <label>Fecha <input id="pre-fecha" type="date"></label>
           <label>Validez <span class="unidad">días</span><input id="pre-validez" type="number" inputmode="numeric" min="1" step="1"></label>
         </div>
+        <div id="pre-horas-caja" hidden>
+          <label>Horas trabajadas <span class="unidad">h</span><input id="pre-horas" type="number" inputmode="decimal" min="0" step="0.5"></label>
+          <p id="pre-horas-ayuda" class="ayuda"></p>
+        </div>
       </section>
 
       <section class="tarjeta">
@@ -252,6 +262,57 @@
       </div>
       <p class="ayuda centro" id="aviso-envio">"Enviar al cliente" arma el PDF, abre WhatsApp o el correo del teléfono y deja el presupuesto como Enviado.</p>
     </div>
+
+    <!-- Cobros y gastos de la obra -->
+    <div id="panel-cobros" class="panel">
+      <section class="tarjeta">
+        <h2>Resultado de la obra</h2>
+        <div id="caja-obra" class="cifras"></div>
+        <p id="caja-obra-ayuda" class="ayuda"></p>
+      </section>
+      <section class="tarjeta">
+        <h2>Cobros</h2>
+        <p class="ayuda arriba">Lo que pagó el cliente: seña, saldo, lo que sea.</p>
+        <ul id="lista-cobros" class="movimientos"></ul>
+        <div class="campos dos">
+          <label>Fecha <input id="cobro-fecha" type="date"></label>
+          <label>Importe <span class="unidad">$</span><input id="cobro-importe" type="number" inputmode="decimal" min="0" step="100"></label>
+          <label>Forma <select id="cobro-forma"><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
+          <label>Nota <input id="cobro-nota" type="text" autocomplete="off" placeholder="Seña, saldo…"></label>
+        </div>
+        <button id="agregar-cobro" class="principal lleno ancho" type="button">+ Agregar cobro</button>
+      </section>
+      <section class="tarjeta">
+        <h2>Gastos</h2>
+        <p class="ayuda arriba">Todo lo que se gastó en esta obra: materiales, combustible, lo que sea.</p>
+        <ul id="lista-gastos" class="movimientos"></ul>
+        <div class="campos dos">
+          <label>Fecha <input id="gasto-fecha" type="date"></label>
+          <label>Importe <span class="unidad">$</span><input id="gasto-importe" type="number" inputmode="decimal" min="0" step="100"></label>
+          <label class="ancho">Detalle <input id="gasto-detalle" type="text" autocomplete="off" list="detalles-gasto" placeholder="Materiales, combustible…"></label>
+        </div>
+        <datalist id="detalles-gasto"><option value="Materiales"><option value="Combustible"><option value="Herramientas"><option value="Viáticos"></datalist>
+        <button id="agregar-gasto" class="principal lleno ancho" type="button">+ Agregar gasto</button>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== Caja: todas las obras ===================== -->
+  <div id="vista-caja" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <section class="tarjeta">
+      <h2 id="caja-mes-titulo">Este mes</h2>
+      <div id="caja-mes" class="cifras"></div>
+    </section>
+    <section class="tarjeta">
+      <h2>Mes por mes</h2>
+      <div id="caja-meses" class="tabla"></div>
+      <p class="ayuda">Ganancia = cobrado − gastado. Acumulado = la ganancia sumada desde el primer mes. Cada cobro y cada gasto cuenta en el mes de su fecha.</p>
+    </section>
+    <section class="tarjeta">
+      <h2>Por obra</h2>
+      <ul id="caja-obras" class="movimientos"></ul>
+    </section>
   </div>
 
   <!-- ===================== Sector ===================== -->

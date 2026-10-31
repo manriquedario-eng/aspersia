@@ -64,6 +64,11 @@
   // obra: { fuente, accesorios, sectores: [...], presupuesto: { desperdicio } }
   // sectorParaCalcular(sector) arma lo que pide RIEGO.calcularSector (lo da la pantalla).
   function materialesDeObra(obra, sectorParaCalcular) {
+    // Mantenimiento o reparación: horas de trabajo (al precio de la hora de la lista); los materiales se escriben
+    // como renglones propios (detalle e importe).
+    if (obra.tipo === 'mantenimiento')
+      return { renglones: [{ clave: 'mo-hora', rubro: 'Mano de obra', descripcion: 'Horas de trabajo', unidad: 'h', cantidad: obra.horas ?? 1, auto: true }],
+        aspersores: 0, valvulas: 0, metrosZanja: 0, m2: 0, m2Estimados: false, notas: [] };
     const R = global.RIEGO;
     const suma = new Map();   // clave → renglón
     const sumar = (clave, rubro, descripcion, unidad, cantidad) => {
@@ -218,6 +223,7 @@
       datos: {
         aspersores: m.aspersores, valvulas: m.valvulas, metrosZanja: m.metrosZanja, m2: m.m2, m2Estimados: m.m2Estimados,
         sectores: obra.sectores.map(s => ({ nombre: s.nombre, aspersores: s.aspersores.length })),
+        tipo: obra.tipo || 'riego', trabajo: obra.trabajo || '',
       },
       notas: m.notas,
     };

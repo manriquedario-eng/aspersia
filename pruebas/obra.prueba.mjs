@@ -345,3 +345,34 @@ test('caño escalonado y colector: diámetros que bajan, reducciones, codo del d
   assert.equal(q3('valvula-pgv-1'), 3);
   assert.deepEqual(o.sectores.map(s => s.valvulaPos), [{ x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }], 'las válvulas, juntas a la salida de la bomba');
 });
+
+test('mantenimiento y caja: horas × precio + materiales, cobros, gastos, ganancia y totales por mes', () => {
+  const datos = { siguienteNumero: 30, precios: {} };
+  const o = A.obraNueva(datos, 'mantenimiento');
+  assert.equal(o.tipo, 'mantenimiento');
+  assert.equal(o.sectores.length, 0);
+  o.horas = 3;
+  o.trabajo = 'Reparación de conexión de la bomba';
+  o.presupuesto.propios.push({ id: 'm1', rubro: 'Materiales', descripcion: 'Conector y 2 m de manguera', unidad: 'u', cantidad: 1, precio: 8500 });
+  const precios = { 'mo-hora': 12000 };
+  const pre = O.presupuesto(o, precios);
+  assert.deepEqual(pre.renglones.map(r => [r.clave ?? r.descripcion, r.cantidad, r.importe]), [['mo-hora', 3, 36000], ['Conector y 2 m de manguera', 1, 8500]]);
+  assert.equal(pre.total, 44500);
+  assert.equal(pre.datos.tipo, 'mantenimiento');
+  // Cobros y gastos
+  o.cobros.push({ fecha: '2026-10-31', importe: 20000, forma: 'Efectivo' }, { fecha: '2026-11-02', importe: 24500, forma: 'Transferencia' });
+  o.gastos.push({ fecha: '2026-10-31', detalle: 'Conector y manguera', importe: 5200 }, { fecha: '2026-10-31', detalle: 'Combustible', importe: 3000 });
+  const c = O.cajaDeObra(o, precios);
+  assert.deepEqual([c.total, c.cobrado, c.falta, c.gastado, c.ganancia], [44500, 44500, 0, 8200, 36300]);
+  assert.ok(Math.abs(c.margen - 36300 / 44500 * 100) < 1e-9);
+  // Por mes, con otra obra de riego que tuvo un gasto en noviembre
+  const otra = A.obraNueva(datos);
+  otra.gastos.push({ fecha: '2026-11-05', detalle: 'Caños', importe: 10000 });
+  const meses = O.cajaPorMes([o, otra]);
+  assert.deepEqual(meses.map(m => [m.mes, m.cobrado, m.gastado, m.ganancia, m.acumulado]),
+    [['2026-10', 20000, 8200, 11800, 11800], ['2026-11', 24500, 10000, 14500, 26300]]);
+  // Una obra de riego vieja (sin tipo ni caja) se completa sin problemas
+  const vieja = A.importar(JSON.stringify({ app: 'Aspersia', version: 3, instalador: {}, precios: {}, siguienteNumero: 1, obras: [{ ...otra, tipo: undefined, cobros: undefined, gastos: undefined }] }));
+  assert.equal(vieja.obras[0].tipo, 'riego');
+  assert.deepEqual([vieja.obras[0].cobros, vieja.obras[0].gastos], [[], []]);
+});

@@ -93,7 +93,7 @@
   // =====================================================================
   // Navegación
   // =====================================================================
-  const VISTAS = ['inicio', 'obra', 'sector', 'precios', 'datos', 'copia'];
+  const VISTAS = ['inicio', 'obra', 'sector', 'precios', 'datos', 'copia', 'caja'];
   function mostrar(vista) {
     for (const v of VISTAS) $(`vista-${v}`).hidden = v !== vista;
     window.scrollTo(0, 0);
@@ -108,17 +108,21 @@
     if (seccion === 'obra') {
       obra = datos.obras.find(o => o.id === id);
       if (!obra) return ir('#/');
+      // Mantenimiento: sin diseño ni plano
+      const mant = obra.tipo === 'mantenimiento';
+      if (mant && ['sector', 'diseno', 'plano'].includes(sub)) return ir(`#/obra/${obra.id}/presupuesto`);
       if (sub === 'sector') {
         const i = Number(n) - 1;
         if (!(i >= 0 && i < obra.sectores.length)) return ir(`#/obra/${obra.id}/diseno`);
         return abrirSector(i);
       }
-      return abrirObra(['cliente', 'diseno', 'plano', 'presupuesto'].includes(sub) ? sub : 'diseno');
+      return abrirObra(['cliente', 'diseno', 'plano', 'presupuesto', 'cobros'].includes(sub) ? sub : mant ? 'presupuesto' : 'diseno');
     }
     obra = null;
     if (seccion === 'precios') { mostrar('precios'); subtitulo('Lista de precios'); return pintarPrecios(); }
     if (seccion === 'datos') { mostrar('datos'); subtitulo('Mis datos'); return pintarDatos(); }
     if (seccion === 'copia') { mostrar('copia'); subtitulo('Copia de seguridad'); return pintarCopia(); }
+    if (seccion === 'caja') { mostrar('caja'); subtitulo('Caja'); return pintarCaja(); }
     mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio(); pintarRecordatorio();
   }
   const subtitulo = t => $('subtitulo').textContent = t;
@@ -133,20 +137,25 @@
       let total = '';
       try { const p = presupuestoDe(o); if (p.total) total = ` · ${P.pesos(p.total)}`; } catch { /* sin total */ }
       const lugar = [o.cliente.nombre, o.cliente.localidad].filter(Boolean).join(' · ');
-      return `<li><a class="sector-tarjeta" href="#/obra/${o.id}/diseno">
+      const mant = o.tipo === 'mantenimiento';
+      const caja = O.cajaDeObra(o, datos.precios);
+      const cobrado = caja.cobrado ? ` · cobrado ${P.pesos(caja.cobrado)}` : '';
+      return `<li><a class="sector-tarjeta" href="#/obra/${o.id}/${mant ? 'presupuesto' : 'diseno'}">
         <span class="sector-nombre">${escapar(nombreObra(o))}</span>
         <span class="sector-datos">${escapar(lugar || 'Sin datos del cliente')}</span>
-        <span class="sector-datos">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${o.sectores.length} sector${o.sectores.length === 1 ? '' : 'es'}${total}</span>
+        <span class="sector-datos">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${mant ? 'Mantenimiento' : `${o.sectores.length} sector${o.sectores.length === 1 ? '' : 'es'}`}${total}${cobrado}</span>
         <span class="estado ${CLASE_ESTADO[o.estado] || 'info'}">${escapar(o.estado)}</span>
       </a></li>`;
     }).join('') : '<li class="vacio"><b>Empezá tu primera obra</b><span>Cargá el cliente, diseñá los sectores y armá el presupuesto.</span></li>';
   }
-  $('nueva-obra').addEventListener('click', () => {
-    const o = A.obraNueva(datos);
+  const nuevaObra = tipo => {
+    const o = A.obraNueva(datos, tipo);
     datos.obras.push(o);
     A.guardar(datos);
     ir(`#/obra/${o.id}/cliente`);
-  });
+  };
+  $('nueva-obra').addEventListener('click', () => nuevaObra('riego'));
+  $('nuevo-mantenimiento').addEventListener('click', () => nuevaObra('mantenimiento'));
 
   // =====================================================================
   // Obra: pestañas Cliente, Diseño y Presupuesto
@@ -157,15 +166,18 @@
     nSector = null;
     mostrar('obra');
     subtitulo(nombreObra(obra));
+    const mant = obra.tipo === 'mantenimiento';
     document.querySelectorAll('[data-pestana]').forEach(a => {
       a.href = `#/obra/${obra.id}/${a.dataset.pestana}`;
       a.setAttribute('aria-selected', a.dataset.pestana === p);
+      a.hidden = mant && (a.dataset.pestana === 'diseno' || a.dataset.pestana === 'plano');
     });
-    for (const panel of ['cliente', 'diseno', 'plano', 'presupuesto']) $(`panel-${panel}`).hidden = panel !== p;
+    for (const panel of ['cliente', 'diseno', 'plano', 'presupuesto', 'cobros']) $(`panel-${panel}`).hidden = panel !== p;
     if (p === 'cliente') pintarCliente();
     if (p === 'diseno') { armarFuente(); pintarDiseno(); $('consulta-resultado').textContent = ''; }
     if (p === 'plano') abrirPlano();
     if (p === 'presupuesto') pintarPresupuesto();
+    if (p === 'cobros') pintarCobros();
   }
 
   // =====================================================================
@@ -408,7 +420,10 @@
     $('obra-nombre').value = obra.nombre;
     $('obra-nombre').placeholder = obra.cliente.nombre ? `Casa ${obra.cliente.nombre.trim().split(' ').at(-1)}` : 'Casa Pérez';
     opciones($('obra-estado'), A.ESTADOS.map(e => [e, e]), obra.estado);
+    $('trabajo-caja').hidden = obra.tipo !== 'mantenimiento';
+    $('obra-trabajo').value = obra.trabajo || '';
   }
+  $('obra-trabajo').addEventListener('input', ev => { obra.trabajo = ev.target.value; guardar(); });
   document.querySelectorAll('[data-cliente]').forEach(i => i.addEventListener('input', () => {
     obra.cliente[i.dataset.cliente] = i.value;
     if (i.dataset.cliente === 'nombre') $('obra-nombre').placeholder = i.value ? `Casa ${i.value.trim().split(' ').at(-1)}` : 'Casa Pérez';
@@ -431,6 +446,7 @@
     copia.presupuesto.numero = datos.siguienteNumero++;
     copia.presupuesto.fecha = A.hoy();
     copia.presupuesto.congelado = null;
+    copia.cobros = []; copia.gastos = [];
     datos.obras.push(copia);
     A.guardar(datos);
     ir(`#/obra/${copia.id}/cliente`);
@@ -758,6 +774,17 @@
     $('pre-iva').checked = !!p.iva;
     $('pre-iva').disabled = fijo;
     $('agregar-renglon').hidden = fijo;
+    const mant = obra.tipo === 'mantenimiento';
+    $('agregar-renglon').textContent = mant ? '+ Agregar material' : '+ Agregar renglón propio';
+    $('pre-horas-caja').hidden = !mant;
+    if (mant) {
+      const horas = p.cambios['mo-hora']?.cantidad ?? obra.horas ?? 1, precio = datos.precios['mo-hora'] || 0;
+      $('pre-horas').value = horas;
+      $('pre-horas').disabled = fijo;
+      $('pre-horas-ayuda').innerHTML = precio
+        ? `${fmt(horas, 1)} h × ${P.pesos(precio)} la hora = <b>${P.pesos(horas * precio)}</b>. Los materiales van abajo, con su detalle y su importe.`
+        : 'Falta el precio de la hora: escribilo en el renglón "Horas de trabajo" de abajo (queda guardado en la Lista de precios).';
+    }
     pintarRenglones(pre, fijo);
     pintarTotales(pre);
   }
@@ -839,8 +866,15 @@
     delete obra.presupuesto.cambios[clave].quitar;
     guardar(); pintarPresupuesto();
   });
+  $('pre-horas').addEventListener('change', ev => {
+    obra.horas = Math.max(0, decimal(ev.target.value));
+    if (obra.presupuesto.cambios['mo-hora']) delete obra.presupuesto.cambios['mo-hora'].cantidad;
+    guardar(); pintarPresupuesto();
+  });
   $('agregar-renglon').addEventListener('click', () => {
-    obra.presupuesto.propios.push({ id: A.nuevoId(), rubro: 'Otros', descripcion: '', unidad: 'gl', cantidad: 1, precio: 0 });
+    // En mantenimiento, cada material: detalle e importe (cantidad 1)
+    const mant = obra.tipo === 'mantenimiento';
+    obra.presupuesto.propios.push({ id: A.nuevoId(), rubro: mant ? 'Materiales' : 'Otros', descripcion: '', unidad: mant ? 'u' : 'gl', cantidad: 1, precio: 0 });
     guardar(); pintarPresupuesto();
     const ultimo = [...document.querySelectorAll('#renglones .renglon[data-propio]')].at(-1);
     ultimo?.querySelector('input').focus();
@@ -922,7 +956,7 @@
   ];
   function pintarPrecios() {
     // Materiales que aparecen en las obras, más la mano de obra por m² aunque no haya obras.
-    const items = new Map([['mo-m2', { descripcion: 'Mano de obra de instalación del riego', unidad: 'm²' }]]);
+    const items = new Map([['mo-m2', { descripcion: 'Mano de obra de instalación del riego', unidad: 'm²' }], ['mo-hora', { descripcion: 'Hora de trabajo (mantenimiento y reparaciones)', unidad: 'h' }]]);
     for (const o of datos.obras) {
       try { for (const r of P.materialesDeObra(o, sectorParaCalcular(o)).renglones) items.set(r.clave, { descripcion: r.descripcion, unidad: r.unidad }); } catch { /* obra con error */ }
     }
@@ -946,6 +980,73 @@
     datos.precios[c] = decimal(ev.target.value);
     guardar();
   });
+
+  // =====================================================================
+  // Cobros y gastos de la obra, y caja de todas las obras
+  // =====================================================================
+  const SOCIOS = 2;   // Darío y Leandro, en partes iguales
+  const fechaCorta = f => f ? f.split('-').reverse().join('/') : '';
+  const nombreMes = m => { const [a, n] = m.split('-').map(Number); return n ? new Date(a, n - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : m; };
+  const cifra = (v, texto, clase = '') => `<div class="cifra ${clase}"><b>${P.pesos(v)}</b><span>${texto}</span></div>`;
+
+  function pintarCobros() {
+    const c = O.cajaDeObra(obra, datos.precios);
+    $('caja-obra').innerHTML = cifra(c.total, 'presupuesto') + cifra(c.cobrado, 'cobrado') + cifra(c.falta, 'falta cobrar')
+      + cifra(c.gastado, 'gastado') + cifra(c.ganancia, `ganancia${c.margen != null ? ` (${fmt(c.margen, 0)} % de lo cobrado)` : ''}`, c.ganancia >= 0 ? 'ganancia' : 'perdida')
+      + cifra(c.ganancia / SOCIOS, 'a cada socio (partes iguales)');
+    $('caja-obra-ayuda').textContent = c.falta > 0
+      ? `Cuando termine de cobrar, la ganancia prevista es de ${P.pesos(c.gananciaPrevista)} (si no hay más gastos).`
+      : c.total ? 'La obra está cobrada.' : 'Todavía no hay presupuesto con importe.';
+    const lista = (items, tipo, texto) => items.length ? items.map((x, i) => `<li><span>${fechaCorta(x.fecha)} · ${escapar(texto(x))}</span>
+      <span><span class="monto">${P.pesos(x.importe)}</span> <button type="button" class="chico peligro" data-borrar-${tipo}="${i}">Quitar</button></span></li>`).join('')
+      : `<li class="ayuda">Todavía no hay ${tipo === 'cobro' ? 'cobros' : 'gastos'}.</li>`;
+    $('lista-cobros').innerHTML = lista(obra.cobros, 'cobro', x => [x.forma, x.nota].filter(Boolean).join(' · '));
+    $('lista-gastos').innerHTML = lista(obra.gastos, 'gasto', x => x.detalle || 'Gasto');
+    for (const id of ['cobro-fecha', 'gasto-fecha']) if (!$(id).value) $(id).value = A.hoy();
+  }
+  $('agregar-cobro').addEventListener('click', () => {
+    const importe = decimal($('cobro-importe').value);
+    if (!(importe > 0)) return $('cobro-importe').focus();
+    obra.cobros.push({ fecha: $('cobro-fecha').value || A.hoy(), importe, forma: $('cobro-forma').value, nota: $('cobro-nota').value.trim() });
+    $('cobro-importe').value = ''; $('cobro-nota').value = '';
+    guardar(); pintarCobros();
+  });
+  $('agregar-gasto').addEventListener('click', () => {
+    const importe = decimal($('gasto-importe').value);
+    if (!(importe > 0)) return $('gasto-importe').focus();
+    obra.gastos.push({ fecha: $('gasto-fecha').value || A.hoy(), importe, detalle: $('gasto-detalle').value.trim() || 'Gasto' });
+    $('gasto-importe').value = ''; $('gasto-detalle').value = '';
+    guardar(); pintarCobros();
+  });
+  // Quitar un cobro o un gasto pide un segundo toque
+  $('panel-cobros').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-borrar-cobro], [data-borrar-gasto]');
+    if (!b) return;
+    if (!b.dataset.confirmar) { b.dataset.confirmar = '1'; b.textContent = 'Tocá de nuevo'; return; }
+    const lista = b.dataset.borrarCobro != null ? obra.cobros : obra.gastos;
+    lista.splice(Number(b.dataset.borrarCobro ?? b.dataset.borrarGasto), 1);
+    guardar(); pintarCobros();
+  });
+
+  function pintarCaja() {
+    const meses = O.cajaPorMes(datos.obras), actual = A.hoy().slice(0, 7);
+    const m = meses.find(x => x.mes === actual) || { cobrado: 0, gastado: 0, ganancia: 0, acumulado: meses.at(-1)?.acumulado || 0 };
+    const falta = datos.obras.filter(o => ['Aceptado', 'Terminado'].includes(o.estado)).reduce((t, o) => t + O.cajaDeObra(o, datos.precios).falta, 0);
+    $('caja-mes-titulo').textContent = `Este mes: ${nombreMes(actual)}`;
+    $('caja-mes').innerHTML = cifra(m.cobrado, 'cobrado') + cifra(m.gastado, 'gastado')
+      + cifra(m.ganancia, 'ganancia', m.ganancia >= 0 ? 'ganancia' : 'perdida') + cifra(m.ganancia / SOCIOS, 'a cada socio')
+      + cifra(meses.at(-1)?.acumulado || 0, 'ganancia acumulada') + cifra(falta, 'falta cobrar (obras aceptadas o terminadas)');
+    $('caja-meses').innerHTML = meses.length ? `<table><thead><tr><th>Mes</th><th>Cobrado</th><th>Gastado</th><th>Ganancia</th><th>Acumulado</th></tr></thead>
+      <tbody>${[...meses].reverse().map(x => `<tr><td class="nombre">${nombreMes(x.mes)}</td><td>${P.pesos(x.cobrado)}</td><td>${P.pesos(x.gastado)}</td>
+      <td class="${x.ganancia < 0 ? 'mal' : ''}">${P.pesos(x.ganancia)}</td><td>${P.pesos(x.acumulado)}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="ayuda">Todavía no hay cobros ni gastos cargados. Se cargan en cada obra, en la pestaña Cobros.</p>';
+    const conMovimientos = datos.obras.filter(o => o.cobros.length || o.gastos.length || ['Aceptado', 'Terminado'].includes(o.estado));
+    $('caja-obras').innerHTML = conMovimientos.length ? conMovimientos.map(o => {
+      const c = O.cajaDeObra(o, datos.precios);
+      return `<li><a href="#/obra/${o.id}/cobros"><span>${escapar(nombreObra(o))}<br><span class="ayuda">cobrado ${P.pesos(c.cobrado)} · gastado ${P.pesos(c.gastado)}${c.falta ? ` · falta ${P.pesos(c.falta)}` : ''}</span></span>
+        <span class="monto ${c.ganancia < 0 ? 'mal' : ''}">${P.pesos(c.ganancia)}</span></a></li>`;
+    }).join('') : '<li class="ayuda">Todavía no hay obras con cobros o gastos.</li>';
+  }
 
   // =====================================================================
   // Mis datos

@@ -91,7 +91,9 @@
     // Se usa lo guardado en el presupuesto (no la obra actual): así un presupuesto cerrado siempre da el mismo PDF.
     const listaSectores = d.sectores || obra.sectores.map(s => ({ nombre: s.nombre, aspersores: s.aspersores.length }));
     const sectores = listaSectores.map(s => `${s.nombre} (${s.aspersores})`).join(', ');
-    const resumen = `Sistema de riego automático por aspersión Hunter: ${listaSectores.length} sector${listaSectores.length === 1 ? '' : 'es'} ` +
+    const resumen = d.tipo === 'mantenimiento'
+      ? `Mantenimiento y reparación del riego${d.trabajo ? ': ' + d.trabajo.trim().replace(/.$/, '') + '.' : '.'}`
+      : `Sistema de riego automático por aspersión Hunter: ${listaSectores.length} sector${listaSectores.length === 1 ? '' : 'es'} ` +
       `(${sectores}), ${d.aspersores} aspersores` + (d.m2 ? ` y unos ${cantidad(d.m2)} m² de superficie regada.` : '.');
     doc.setFillColor(231, 240, 250); doc.setTextColor(...AZUL_OSCURO); doc.setFontSize(9.5);
     const lineasResumen = doc.splitTextToSize(resumen, ancho - 2 * margen - 8);
