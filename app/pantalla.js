@@ -315,7 +315,7 @@
   const planoActual = () => ({
     obra, svg: $('plano-svg'), botones: $('plano-botones'), seleccion: $('plano-seleccion'),
     estadisticas: $('plano-estadisticas'), filtro: $('plano-filtro'), aspersores: aspersoresDelPlano,
-    leyenda: $('plano-leyenda'), rosa: $('plano-rosa'), acciones: $('plano-acciones'),
+    leyenda: $('plano-leyenda'), rosa: $('plano-rosa'), acciones: $('plano-acciones'), flotante: $('plano-flotante'),
     // Al escalar con un lado de la zona cambia el tamaño del terreno y de la foto
     alEscalar: () => { $('plano-ancho').value = obra.plano.ancho; $('plano-largo').value = obra.plano.largo; pintarFondo(); },
     alCambiar: () => { sincronizarDistancias(); guardar(); },

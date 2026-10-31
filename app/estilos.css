@@ -375,3 +375,12 @@ ol.pasos li { margin: 4px 0; }
 .botones-plano .boton { margin: 0; }
 .sin-ubicar { flex-wrap: wrap; }
 .sin-ubicar i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+/* Barra pegada debajo del plano mientras se marca: los botones a la vista sin tapar la foto */
+.plano-flotante { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: var(--papel); border: 1px solid var(--linea); border-radius: 12px; padding: 6px 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); font-size: .88rem; }
+.plano-flotante > span { flex: 1 1 100%; font-weight: 600; color: var(--primario); }
+.plano-flotante > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.plano-flotante .chico { margin: 0; min-height: 38px; }
+.plano-flotante .chico.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
+.plano-flotante input { width: 80px; min-height: 38px; }
+.plano .marca-calibrar.cerrar { stroke: var(--hoja); }

@@ -176,9 +176,12 @@
         el('polygon', { points: linea.map(P).join(' '), 'stroke-width': 2.5 * escala, class: 'linea-calibrar zona-nueva' }, svg);
       else if (linea.length > 1)
         el('polyline', { points: linea.map(P).join(' '), fill: 'none', 'stroke-width': 2.5 * escala, class: 'linea-calibrar' }, svg);
+      // Cada punto marcado se puede arrastrar para corregirlo (sin mover el mapa); la primera esquina cierra la zona
       marcando.puntos.forEach((p, k) => {
-        el('circle', { cx: p.x, cy: Y(p.y), r: rc, 'stroke-width': 1.5 * escala, class: 'marca-calibrar' }, svg);
-        const txt = el('text', { x: p.x + rc * 1.4, y: Y(p.y) - rc * 1.2, 'font-size': rc * 3, 'stroke-width': 3 * escala, class: 'texto-calibrar' }, svg);
+        const g = el('g', { 'data-marca': k, class: 'pieza' }, svg);
+        el('circle', { cx: p.x, cy: Y(p.y), r: rc * 3, class: 'tocar' }, g);
+        el('circle', { cx: p.x, cy: Y(p.y), r: rc, 'stroke-width': 1.5 * escala, class: `marca-calibrar ${k === 0 && marcando.tipo === 'zona' && marcando.puntos.length > 2 ? 'cerrar' : ''}` }, g);
+        const txt = el('text', { x: p.x + rc * 1.4, y: Y(p.y) - rc * 1.2, 'font-size': rc * 3, 'stroke-width': 3 * escala, class: 'texto-calibrar' }, g);
         txt.textContent = marcando.etiquetas ? marcando.etiquetas[k] : k + 1;
       });
     }
@@ -225,8 +228,39 @@
         <i style="background:${colorSector(f.k)}"></i>${nombre(f.k).replace(/[<>&]/g, '')} · ${f.i + 1}: ${f.a.boquilla || ''} ${f.a.arco ? f.a.arco + '°' : ''}</button>`).join('')}</div>` : '');
   }
 
+  // Barra flotante sobre el plano mientras se marca algo: la instrucción corta y los botones siempre a la vista.
+  function pintarFlotante() {
+    const f = ctx.flotante;
+    if (!f) return;
+    const b = (attr, valor, texto, clase = '', off = false) => `<button type="button" class="chico ${clase}" ${attr}="${valor}" ${off ? 'disabled' : ''}>${texto}</button>`;
+    const n = marcando?.puntos?.length || 0;
+    let texto = '', botones = [];
+    if (marcando?.tipo === 'zona') {
+      texto = n < 3 ? `Tocá cada esquina (${n})` : `${n} esquinas · tocá la 1 para cerrar`;
+      botones = [b('data-modo-accion', 'deshacer', 'Deshacer', '', !n), b('data-modo-accion', 'zona-listo', 'Listo', 'activo', n < 3), b('data-modo-accion', 'cancelar', 'Cancelar')];
+    } else if (marcando?.tipo === 'ramal') {
+      texto = `Tocá por dónde va el caño (${n})`;
+      botones = [b('data-ramal', 'deshacer', 'Deshacer', '', !n), b('data-ramal', 'listo', 'Listo', 'activo', !n), b('data-ramal', 'cancelar', 'Cancelar')];
+    } else if (marcando?.tipo === 'aspersores') {
+      texto = `Tocá dónde va cada aspersor (${marcando.puestos})`;
+      botones = [b('data-modo-accion', 'cancelar', 'Listo', 'activo')];
+    } else if (marcando?.tipo === 'ubicar') {
+      texto = 'Tocá dónde va el aspersor';
+      botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
+    } else if (midiendo?.esperando) {
+      texto = 'Tocá el lado que conocés';
+      botones = [b('data-modo-accion', 'medir-cancelar', 'Ahora no')];
+    } else if (midiendo) {
+      texto = 'Medida real del lado amarillo:';
+      botones = ['<input type="number" inputmode="decimal" step="0.1" min="0.1" placeholder="m" data-medida-real>', b('data-modo-accion', 'medir-aplicar', 'Aplicar', 'activo'), b('data-modo-accion', 'medir-cancelar', 'Ahora no')];
+    }
+    f.hidden = !texto;
+    f.innerHTML = texto ? `<span>${texto}</span><div>${botones.join('')}</div>` : '';
+  }
+
   // Panel del elemento tocado: posición exacta y giro.
   function pintarSeleccion() {
+    pintarFlotante();
     const caja = ctx.seleccion;
     if (marcando?.tipo === 'ramal') {
       const n = marcando.puntos.length;
@@ -273,8 +307,8 @@
           ${botones([['medir-cancelar', 'Ahora no']])}`
         : `<p class="sel-titulo">Lado elegido (marcado en amarillo)</p>
           <p class="ayuda">En el plano mide ${fmt1(largo)} m. ¿Cuánto mide en la realidad?</p>
-          <label>Medida real <span class="unidad">m</span><input type="number" inputmode="decimal" step="0.1" min="0.1" data-medida-real></label>
-          ${botones([['medir-aplicar', 'Aplicar', 'activo'], ['medir-otro', 'Otro lado'], ['medir-cancelar', 'Ahora no']])}
+          ${ctx.flotante ? '<p class="ayuda">Escribí la medida en el recuadro de arriba del plano, o tocá otro lado para cambiarlo.</p>' + botones([['medir-otro', 'Otro lado']]) : `<label>Medida real <span class="unidad">m</span><input type="number" inputmode="decimal" step="0.1" min="0.1" data-medida-real></label>
+          ${botones([['medir-aplicar', 'Aplicar', 'activo'], ['medir-otro', 'Otro lado'], ['medir-cancelar', 'Ahora no']])}`}
           ${midiendo.error ? `<p class="ayuda aviso-arco">${midiendo.error}</p>` : ''}`;
       return;
     }
@@ -472,7 +506,7 @@
       'medir': () => { midiendo = { esperando: true }; pintar(); },
       'medir-otro': () => { midiendo = { esperando: true }; pintar(); },
       'medir-cancelar': () => { midiendo = null; pintar(); },
-      'medir-aplicar': () => aplicarMedida(parseFloat(String(ctx.seleccion.querySelector('[data-medida-real]')?.value).replace(',', '.'))),
+      'medir-aplicar': () => aplicarMedida(parseFloat(String([ctx.flotante, ctx.seleccion].map(c => c?.querySelector('[data-medida-real]')?.value).find(v => v)).replace(',', '.'))),
       'quitar-esquina': () => {
         plano().zonas[seleccion.s].splice(seleccion.i, 1);
         seleccion = { tipo: 'zona', s: seleccion.s };
@@ -483,8 +517,13 @@
 
   // Vista que muestra todo el terreno con un margen.
   function ajustar() {
-    const t = plano(), m = Math.max(1.5, Math.max(t.ancho, t.largo) * 0.06);
+    const t = plano(), m = Math.max(0.5, Math.max(t.ancho, t.largo) * 0.03);
     const svg = ctx.svg;
+    // El cuadro del plano toma la forma del terreno (una captura parada ocupa casi toda la pantalla del teléfono)
+    if (svg.clientWidth) {
+      const alto = Math.round(Math.min(window.innerHeight * 0.68, Math.max(260, svg.clientWidth * (t.largo + 2 * m) / (t.ancho + 2 * m))));
+      if (Math.abs(svg.clientHeight - alto) > 2) svg.style.height = `${alto}px`;
+    }
     const proporcion = (svg.clientHeight || 300) / (svg.clientWidth || 300);
     let w = t.ancho + 2 * m, h = t.largo + 2 * m;
     if (h / w > proporcion) w = h / proporcion; else h = w * proporcion;
@@ -514,9 +553,12 @@
       gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y), vista: { ...vista } };
       return;
     }
-    const libre = !marcando && !midiendo;     // al marcar puntos o elegir un lado, un toque marca; no agarra piezas
-    const pieza = libre ? ev.target.closest('[data-mover]') : null;
-    const zona = libre && !pieza ? ev.target.closest('[data-zona]') : null;
+    // Mientras se marcan puntos, agarrar uno ya marcado lo corrige (no mueve el mapa)
+    const marca = marcando ? ev.target.closest('[data-marca]') : null;
+    if (marca) { gesto = { tipo: 'moverMarca', k: Number(marca.dataset.marca), x0: ev.clientX, y0: ev.clientY, movio: false }; return; }
+    // Al marcar, un toque marca y no agarra piezas; al elegir el lado que se conoce, las esquinas se siguen pudiendo arrastrar
+    const pieza = marcando ? null : ev.target.closest(midiendo ? '[data-mover="vertice"]' : '[data-mover]');
+    const zona = !marcando && !midiendo && !pieza ? ev.target.closest('[data-zona]') : null;
     const p = aSVG(ev);
     if (pieza) {
       const sel = { tipo: pieza.dataset.mover, s: Number(pieza.dataset.s), i: Number(pieza.dataset.i) };
@@ -543,6 +585,11 @@
       vista = { ...gesto.vista, x: gesto.vista.x - mx * porPixel, y: gesto.vista.y - my * porPixel };
       return repintar();
     }
+    if (gesto.tipo === 'moverMarca' && marcando?.puntos[gesto.k]) {
+      const p = aSVG(ev);
+      marcando.puntos[gesto.k] = { x: p.x, y: plano().largo - p.y };
+      return repintar();
+    }
     if (gesto.tipo === 'mover') {
       const p = aSVG(ev), t = plano();
       const obj = objeto(gesto.sel);
@@ -555,7 +602,11 @@
   function alSoltar(ev) {
     punteros.delete(ev.pointerId);
     if (!gesto) return;
-    if (gesto.tipo === 'mover') {
+    if (gesto.tipo === 'moverMarca') {
+      // Tocar (sin arrastrar) la primera esquina cierra la zona
+      if (!gesto.movio && gesto.k === 0 && marcando?.tipo === 'zona' && marcando.puntos.length > 2) accionModo('zona-listo')();
+      else pintar();
+    } else if (gesto.tipo === 'mover') {
       if (!gesto.movio) { if (!mismaPieza(seleccion, gesto.sel)) avisoArco = ''; seleccion = gesto.sel; }
       avisarCambio(gesto.movio);
       pintar();
@@ -564,7 +615,7 @@
       const p = aSVG(ev), lado = G.ladoMasCercano(plano().zonas || [], { x: p.x, y: plano().largo - p.y });
       if (lado) midiendo = { zona: lado.zona, lado: lado.lado };
       pintar();
-      ctx.seleccion.querySelector('[data-medida-real]')?.focus();
+      (ctx.flotante?.querySelector('[data-medida-real]') || ctx.seleccion.querySelector('[data-medida-real]'))?.focus();
     } else if (gesto.tipo === 'mirar' && !gesto.movio && marcando && marcando.tipo !== 'elegir-sector') {
       const p = aSVG(ev), m = marcando;
       if (m.puntos.length === m.n) m.puntos = [];
@@ -619,7 +670,7 @@
       ctx.seleccion.addEventListener('change', ev => {
         if (ev.target.matches('[data-arco-libre]') && seleccion?.tipo === 'asp') elegirArco(parseFloat(String(ev.target.value).replace(',', '.')));
       });
-      ctx.seleccion.addEventListener('click', ev => {
+      const alTocarBoton = ev => {
         const arco = ev.target.closest('[data-arco]');
         if (arco && seleccion?.tipo === 'asp') return elegirArco(Number(arco.dataset.arco));
         const ramal = ev.target.closest('[data-ramal]');
@@ -654,7 +705,11 @@
         obj.giro = (((obj.giro || 0) + Number(b.dataset.girar)) % 360 + 360) % 360;
         avisarCambio(false);
         pintar();
-      });
+      };
+      ctx.seleccion.addEventListener('click', alTocarBoton);
+      ctx.flotante?.addEventListener('click', alTocarBoton);
+      // En la barra flotante, Enter en la medida aplica la escala
+      ctx.flotante?.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches('[data-medida-real]')) accionModo('medir-aplicar')(); });
       // Botones de arriba del plano
       ctx.acciones?.addEventListener('click', ev => {
         const b = ev.target.closest('[data-plano], [data-ubicar]');
