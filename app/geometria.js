@@ -158,7 +158,7 @@
   // Aplica un factor de escala a todo el plano: terreno, imagen de fondo, fuente, válvulas, aspersores, ramales y zonas.
   // Todo se multiplica desde la esquina de abajo a la izquierda, así cada cosa queda sobre el mismo lugar de la imagen.
   function escalarPlano(plano, sectores, k) {
-    const r1 = v => Math.round(v * 100) / 100;
+    const r1 = v => Math.round(v * 1000) / 1000;   // al milímetro: la medida que se escribe queda exacta
     plano.ancho = r1(plano.ancho * k);
     plano.largo = r1(plano.largo * k);
     if (plano.fondo) { plano.fondo.ancho *= k; plano.fondo.alto *= k; }

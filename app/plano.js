@@ -143,6 +143,7 @@
     const grosor = nominal => Math.max(2, nominal / 10) * escala;   // 32 mm → 3,2 px; 63 mm → 6,3 px
     sectores.forEach((s, k) => {
       if (soloSector != null && k !== soloSector) return;
+      if (!t.bombaUbicada) return;   // hasta que se marque la bomba no hay de dónde sacar caños
       const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
       const diametros = O().diametrosDelSector(ctx.obra, s);
       if (!O().tieneRamal(s)) {
@@ -181,7 +182,7 @@
       });
     });
     // Bomba (o canilla) con su nombre; se arrastra y las válvulas van con ella
-    const f = el('g', { 'data-mover': 'fuente', class: `pieza ${seleccion?.tipo === 'fuente' ? 'elegida' : ''}` }, svg);
+    const f = el('g', { 'data-mover': 'fuente', class: `pieza ${seleccion?.tipo === 'fuente' ? 'elegida' : ''}`, ...(t.bombaUbicada ? {} : { display: 'none' }) }, svg);
     el('circle', { cx: t.fuente.x, cy: Y(t.fuente.y), r: rf * 2.2, class: 'tocar' }, f);
     el('circle', { cx: t.fuente.x, cy: Y(t.fuente.y), r: rf, class: 'fuente' }, f);
     const etiqueta = el('text', { x: t.fuente.x, y: Y(t.fuente.y) + rf * 2.4, 'font-size': rf * 1.2, 'stroke-width': 3 * escala, class: 'texto-fuente' }, f);
@@ -189,6 +190,7 @@
     // Válvulas: a la salida de la bomba, con el número de su sector (se tocan para dibujar el caño del sector)
     sectores.forEach((s, k) => {
       if (soloSector != null && k !== soloSector) return;
+      if (!t.bombaUbicada) return;
       const v = el('g', { 'data-mover': 'fuente', class: `pieza ${seleccion?.tipo === 'fuente' ? 'elegida' : ''}` }, svg);
       el('circle', { cx: s.valvulaPos.x, cy: Y(s.valvulaPos.y), r: rf * 1.3, class: 'tocar' }, v);
       el('rect', { x: s.valvulaPos.x - rf * 0.7, y: Y(s.valvulaPos.y) - rf * 0.7, width: rf * 1.4, height: rf * 1.4, fill: colorSector(k), class: 'valvula' }, v);
@@ -270,8 +272,10 @@
       if (soloSector != null && k !== soloSector) return;
       s.aspersores.forEach((a, i) => { if (a.x == null || a.y == null) faltan.push({ k, i, a }); });
     });
-    ctx.acciones.innerHTML = `<div class="botones-plano">
-        <button type="button" class="boton" data-plano="aspersores" ${ocupado ? 'disabled' : ''}>+ Aspersor</button>
+    const sinBomba = !t.bombaUbicada;
+    ctx.acciones.innerHTML = (sinBomba ? `<button type="button" class="principal lleno ancho" data-plano="bomba" ${ocupado ? 'disabled' : ''}>Ubicar ${nombreFuente()}</button>
+        <p class="ayuda">Primero marcá dónde va ${nombreFuente()}: de ahí salen los caños de los sectores.</p>` : '') + `<div class="botones-plano">
+        <button type="button" class="boton" data-plano="aspersores" ${ocupado || sinBomba ? 'disabled' : ''}>+ Aspersor</button>
         <button type="button" class="boton" data-plano="zona" ${ocupado ? 'disabled' : ''}>${(t.zonas || []).length ? '+ Otra zona' : 'Dibujar zona a regar'}</button>
       </div>` + (faltan.length ? `<p class="ayuda">Sin ubicar en el plano (tocá uno y después tocá dónde va):</p>
       <div class="filtro sin-ubicar">${faltan.map(f => `<button type="button" data-ubicar="${f.k},${f.i}" class="${marcando?.tipo === 'ubicar' && marcando.s === f.k && marcando.i === f.i ? 'activo' : ''}">
@@ -294,6 +298,9 @@
     } else if (marcando?.tipo === 'aspersores') {
       texto = 'Tocá dónde va el aspersor';
       botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
+    } else if (marcando?.tipo === 'bomba') {
+      texto = `Tocá dónde va ${nombreFuente()}`;
+      botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
     } else if (marcando?.tipo === 'ubicar') {
       texto = 'Tocá dónde va el aspersor';
       botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
@@ -302,7 +309,7 @@
       botones = [b('data-modo-accion', 'medir-cancelar', 'Ahora no')];
     } else if (midiendo) {
       texto = 'Medida real del lado amarillo:';
-      botones = ['<input type="number" inputmode="decimal" step="0.1" min="0.1" placeholder="m" data-medida-real>', b('data-modo-accion', 'medir-aplicar', 'Aplicar', 'activo'), b('data-modo-accion', 'medir-cancelar', 'Ahora no')];
+      botones = ['<input type="text" inputmode="decimal" autocomplete="off" step="0.1" min="0.1" placeholder="m" data-medida-real>', b('data-modo-accion', 'medir-aplicar', 'Aplicar', 'activo'), b('data-modo-accion', 'medir-cancelar', 'Ahora no')];
     }
     f.hidden = !texto;
     f.innerHTML = texto ? `<span>${texto}</span><div>${botones.join('')}</div>` : '';
@@ -356,7 +363,7 @@
           ${botones([['medir-cancelar', 'Ahora no']])}`
         : `<p class="sel-titulo">Lado elegido (marcado en amarillo)</p>
           <p class="ayuda">En el plano mide ${fmt1(largo)} m. ¿Cuánto mide en la realidad?</p>
-          ${ctx.flotante ? '<p class="ayuda">Escribí la medida en el recuadro de arriba del plano, o tocá otro lado para cambiarlo.</p>' + botones([['medir-otro', 'Otro lado']]) : `<label>Medida real <span class="unidad">m</span><input type="number" inputmode="decimal" step="0.1" min="0.1" data-medida-real></label>
+          ${ctx.flotante ? '<p class="ayuda">Escribí la medida en el recuadro que está justo debajo del plano, o tocá otro lado para cambiarlo.</p>' + botones([['medir-otro', 'Otro lado']]) : `<label>Medida real <span class="unidad">m</span><input type="text" inputmode="decimal" autocomplete="off" step="0.1" min="0.1" data-medida-real></label>
           ${botones([['medir-aplicar', 'Aplicar', 'activo'], ['medir-otro', 'Otro lado'], ['medir-cancelar', 'Ahora no']])}`}
           ${midiendo.error ? `<p class="ayuda aviso-arco">${midiendo.error}</p>` : ''}`;
       return;
@@ -418,8 +425,8 @@
     // La válvula no se ubica a mano: va a la salida de la bomba
     caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>
       <div class="campos dos" ${seleccion.tipo === 'valvula' ? 'hidden' : ''}>
-        <label>X <span class="unidad">m desde la izquierda</span><input type="number" inputmode="decimal" step="0.1" data-sel="x" value="${obj.x}"></label>
-        <label>Y <span class="unidad">m desde abajo</span><input type="number" inputmode="decimal" step="0.1" data-sel="y" value="${obj.y}"></label>
+        <label>X <span class="unidad">m desde la izquierda</span><input type="text" inputmode="decimal" autocomplete="off" step="0.1" data-sel="x" value="${obj.x}"></label>
+        <label>Y <span class="unidad">m desde abajo</span><input type="text" inputmode="decimal" autocomplete="off" step="0.1" data-sel="y" value="${obj.y}"></label>
       </div>${giro}`;
   }
 
@@ -531,6 +538,24 @@
       } };
     pintar();
   }
+  // Después de definir el plano, lo primero es la bomba: de ahí salen los caños de los sectores.
+  const nombreFuente = () => ctx.obra.fuente.tipo === 'bomba' ? 'la bomba' : 'la canilla';
+  function ubicarBomba() {
+    seleccion = null;
+    marcando = { tipo: 'bomba', n: 1, etiquetas: [''], puntos: [], alTerminar: p => {
+      const t = plano();
+      t.fuente = { x: r1(Math.min(t.ancho, Math.max(0, p.x))), y: r1(Math.min(t.largo, Math.max(0, p.y))) };
+      t.bombaUbicada = true;
+      marcando = null;
+      seleccion = { tipo: 'fuente' };   // se abre el panel con "Dibujar caño" de cada sector
+      avisarCambio(true);
+      pintar();
+    } };
+    pintar();
+  }
+  // Al terminar la escala de la zona: si la bomba todavía no está, se pide enseguida
+  const seguirConBomba = () => { if (!plano().bombaUbicada) ubicarBomba(); };
+
   function ubicar(k, i) {
     seleccion = null;
     marcando = { tipo: 'ubicar', s: k, i, n: 1, etiquetas: [''], puntos: [], alTerminar: p => {
@@ -555,6 +580,7 @@
     avisarCambio(true);
     ctx.alEscalar?.();
     ajustar(); pintar();
+    seguirConBomba();
   }
   function accionModo(accion) {
     const quitar = (boton, hacer) => {
@@ -576,10 +602,10 @@
       },
       'medir': () => { midiendo = { esperando: true }; pintar(); },
       'medir-otro': () => { midiendo = { esperando: true }; pintar(); },
-      'medir-cancelar': () => { midiendo = null; editandoZona = null; pintar(); },
+      'medir-cancelar': () => { midiendo = null; editandoZona = null; pintar(); seguirConBomba(); },
       'editar-zona': () => { editandoZona = seleccion.s; pintar(); },
       'zona-terminar': () => { editandoZona = null; midiendo = null; seleccion = null; pintar(); },
-      'medir-aplicar': () => aplicarMedida(parseFloat(String([ctx.flotante, ctx.seleccion].map(c => c?.querySelector('[data-medida-real]')?.value).find(v => v)).replace(',', '.'))),
+      'medir-aplicar': () => aplicarMedida(global.RIEGO.leerNumero([ctx.flotante, ctx.seleccion].map(c => c?.querySelector('[data-medida-real]')?.value).find(v => v))),
       'quitar-esquina': () => {
         plano().zonas[seleccion.s].splice(seleccion.i, 1);
         seleccion = { tipo: 'zona', s: seleccion.s };
@@ -627,7 +653,11 @@
     punteros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (punteros.size === 2) {
       const [a, b] = [...punteros.values()];
-      gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y), vista: { ...vista } };
+      // Pellizco: agranda o achica alrededor de los dedos (no del centro) y, con los dos dedos apoyados, también corre el plano
+      const r = ctx.svg.getBoundingClientRect();
+      const medio = { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top };
+      gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, vista: { ...vista },
+        ancla: { x: vista.x + medio.x * vista.w / r.width, y: vista.y + medio.y * vista.h / r.height } };
       return;
     }
     // Agarraderas del abanico del aspersor elegido: girar o abrir/cerrar el arco
@@ -660,9 +690,11 @@
     if (gesto.tipo === 'pellizco' && punteros.size === 2) {
       const [a, b] = [...punteros.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const k = gesto.dist / d, v = gesto.vista;
-      const w = Math.min(500, Math.max(2, v.w * k));
-      vista = { x: v.x + (v.w - w) / 2, y: v.y + (v.h - v.h * w / v.w) / 2, w, h: v.h * w / v.w };
+      const k = gesto.dist / (d || 1), v = gesto.vista, r = ctx.svg.getBoundingClientRect();
+      const w = Math.min(500, Math.max(2, v.w * k)), h = v.h * w / v.w;
+      // El punto del plano que estaba entre los dedos sigue entre los dedos
+      const medio = { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top };
+      vista = { x: gesto.ancla.x - medio.x * w / r.width, y: gesto.ancla.y - medio.y * h / r.height, w, h };
       return repintar();
     }
     const mx = ev.clientX - gesto.x0, my = ev.clientY - gesto.y0;
@@ -710,6 +742,7 @@
     } else if (gesto.tipo === 'mover') {
       if (!gesto.movio) { if (!mismaPieza(seleccion, gesto.sel)) avisoArco = ''; seleccion = gesto.sel; }
       if (gesto.sel.tipo === 'asp' || gesto.sel.tipo === 'codo') ultimoSector = gesto.sel.s;
+      if (gesto.sel.tipo === 'fuente' && gesto.movio) plano().bombaUbicada = true;
       avisarCambio(gesto.movio);
       pintar();
     } else if (gesto.tipo === 'mirar' && !gesto.movio && midiendo?.esperando) {
@@ -760,7 +793,7 @@
       ctx.seleccion.addEventListener('input', ev => {
         const campo = ev.target.dataset.sel;
         if (!campo || !seleccion) return;
-        const v = parseFloat(String(ev.target.value).replace(',', '.'));
+        const v = global.RIEGO.leerNumero(ev.target.value);
         if (!Number.isFinite(v)) return;
         const obj = objeto(seleccion), t = plano();
         if (campo === 'giro') obj.giro = ((v % 360) + 360) % 360;
@@ -772,7 +805,7 @@
       });
       // El arco escrito se toma al terminar de escribirlo (si no, al escribir "45" pasaría por 4°).
       ctx.seleccion.addEventListener('change', ev => {
-        if (ev.target.matches('[data-arco-libre]') && seleccion?.tipo === 'asp') elegirArco(parseFloat(String(ev.target.value).replace(',', '.')));
+        if (ev.target.matches('[data-arco-libre]') && seleccion?.tipo === 'asp') elegirArco(global.RIEGO.leerNumero(ev.target.value));
       });
       const alTocarBoton = ev => {
         const arco = ev.target.closest('[data-arco]');
@@ -820,6 +853,7 @@
         if (!b) return;
         if (b.dataset.ubicar) { const [k, i] = b.dataset.ubicar.split(',').map(Number); ubicar(k, i); }
         else if (b.dataset.plano === 'zona') dibujarZona();
+        else if (b.dataset.plano === 'bomba') ubicarBomba();
         else {
           const sectores = ctx.obra.sectores;
           const delElegido = ['asp', 'codo'].includes(seleccion?.tipo) ? seleccion.s : ultimoSector;

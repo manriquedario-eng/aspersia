@@ -169,3 +169,9 @@ test('mezclar difusores con turbinas da aviso', () => {
   });
   assert.ok(r.avisos.some(a => a.texto.includes('mezcla')));
 });
+
+test('números escritos a la argentina: coma decimal y punto de miles', () => {
+  const casos = [['5,12', 5.12], ['5.12', 5.12], ['0,5', 0.5], ['20.000', 20000], ['1.234,5', 1234.5], ['$ 8.500', 8500], [' 3,5 ', 3.5], ['12', 12]];
+  for (const [texto, valor] of casos) assert.equal(R.leerNumero(texto), valor, texto);
+  assert.ok(Number.isNaN(R.leerNumero('')) && Number.isNaN(R.leerNumero('abc')));
+});

@@ -77,6 +77,8 @@
       o.gastos ??= [];
       o.plano ||= planoNuevo();
       o.plano.zonas ??= [];          // zonas a regar dibujadas sobre la foto
+      // Bomba ubicada en el plano: en obras de antes, si ya tenían aspersores o caños dibujados, se da por ubicada
+      o.plano.bombaUbicada ??= o.sectores.some(s => s.ramal?.length || s.aspersores.some(p => p.x != null));
       o.plano.norte ??= 0;           // rumbo del norte en el plano (0 = arriba, como Google Maps)
       o.plano.verSol ??= false;      // degradé del lado del sol
       // Se sacó marcar casas, muros y árboles (30-oct-2026): se borra lo que haya quedado guardado.

@@ -386,12 +386,22 @@
     return fmt(min, 2) === fmt(max, 2) ? fmt(min, 2) : `${fmt(min, 2)} a ${fmt(max, 2)}`;
   }
 
+  // Número escrito a la argentina o con punto: "5,12" → 5,12; "5.12" → 5,12; "20.000" → 20000; "1.234,5" → 1234,5.
+  // Vacío o inválido → NaN.
+  function leerNumero(v) {
+    let t = String(v ?? '').trim().replace(/[\s$]/g, '');
+    if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    else t = t.replace(',', '.');
+    return t === '' ? NaN : Number(t);
+  }
+
   function fmt(v, dec) {
     return Number(v).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
   }
 
   global.RIEGO = {
     MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, MANGUERAS, ACCESORIOS_MANGUERA_M, MANGUERA_MAX_M, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
-    interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, escalonar, tramosPorDiametro, fmt,
+    interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, escalonar, tramosPorDiametro, leerNumero, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

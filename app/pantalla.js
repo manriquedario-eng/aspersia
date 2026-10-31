@@ -49,7 +49,7 @@
     return sel.value;
   };
   // Los campos numéricos del teléfono entregan el decimal con punto ("1500.5"); se acepta también la coma.
-  const decimal = v => { const x = parseFloat(String(v).replace(',', '.')); return Number.isFinite(x) ? x : 0; };
+  const decimal = v => { const x = R.leerNumero(v); return Number.isFinite(x) ? x : 0; };   // acepta 5,12 y 5.12
   const escapar = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const materiales = Object.entries(R.CANOS).map(([k, c]) => [k, c.nombre]);
   const diametros = mat => Object.keys(R.CANOS[mat].di).map(n => [n, `${n} mm`]);
@@ -124,6 +124,8 @@
     if (seccion === 'copia') { mostrar('copia'); subtitulo('Copia de seguridad'); return pintarCopia(); }
     if (seccion === 'caja') { mostrar('caja'); subtitulo('Caja'); return pintarCaja(); }
     mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio(); pintarRecordatorio();
+    // Versión guardada en el teléfono (para saber si ya se actualizó)
+    window.caches?.keys().then(k => { const v = k.find(n => n.startsWith('aspersia-v')); $('version-app').textContent = v ? `Versión ${v.replace('aspersia-v', '')}` : ''; }).catch(() => {});
   }
   const subtitulo = t => $('subtitulo').textContent = t;
   window.addEventListener('hashchange', rutear);
@@ -805,8 +807,8 @@
             ${fijo ? '' : '<button type="button" class="quitar" data-r="quitar" aria-label="Quitar renglón">×</button>'}
           </div>
           <div class="renglon-numeros">
-            <label>Cant. <span class="unidad">${escapar(r.unidad)}</span><input type="number" inputmode="decimal" step="any" min="0" data-r="cantidad" value="${r.cantidad}" ${dis}></label>
-            <label>Precio unit. <span class="unidad">$</span><input type="number" inputmode="decimal" step="any" min="0" data-r="precio" value="${r.precio || ''}" placeholder="sin precio" ${dis}></label>
+            <label>Cant. <span class="unidad">${escapar(r.unidad)}</span><input type="text" inputmode="decimal" autocomplete="off" step="any" min="0" data-r="cantidad" value="${r.cantidad}" ${dis}></label>
+            <label>Precio unit. <span class="unidad">$</span><input type="text" inputmode="decimal" autocomplete="off" step="any" min="0" data-r="precio" value="${r.precio || ''}" placeholder="sin precio" ${dis}></label>
             <div class="importe"><span class="unidad">Importe</span><b data-importe>${P.pesos(r.importe)}</b></div>
           </div>
           ${cambiada && !fijo ? `<p class="ayuda">Calculado del diseño: ${fmt(r.cantidadCalculada, 0)} ${escapar(r.unidad)}. <button type="button" class="enlace" data-r="recalcular">Volver al calculado</button></p>` : ''}
@@ -969,7 +971,7 @@
       html += `<h3 class="rubro">${grupo}</h3>` + claves.map(c => {
         const it = items.get(c);
         return `<label class="precio-item">${escapar(it.descripcion)} <span class="unidad">$ por ${escapar(it.unidad)}</span>
-          <input type="number" inputmode="decimal" min="0" step="any" data-precio="${escapar(c)}" value="${datos.precios[c] || ''}" placeholder="sin precio"></label>`;
+          <input type="text" inputmode="decimal" autocomplete="off" min="0" step="any" data-precio="${escapar(c)}" value="${datos.precios[c] || ''}" placeholder="sin precio"></label>`;
       }).join('');
     }
     $('lista-precios').innerHTML = html;

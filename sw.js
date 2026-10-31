@@ -1,7 +1,9 @@
 // Modo sin señal: guarda la app en el teléfono la primera vez y después la abre desde ahí.
 // Cuando hay señal, baja en segundo plano la versión nueva, que se ve la próxima vez que se abre.
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
-const VERSION = 'aspersia-v24';
+// Siempre se piden los archivos frescos al servidor (sin la memoria intermedia del navegador, que en GitHub Pages
+// guarda hasta 10 minutos): si no, una versión nueva podía guardarse con archivos viejos mezclados.
+const VERSION = 'aspersia-v27';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -35,7 +37,7 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', ev => {
-  ev.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  ev.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', ev => {
@@ -51,7 +53,7 @@ self.addEventListener('fetch', ev => {
   if (ev.request.method !== 'GET' || new URL(ev.request.url).origin !== location.origin) return;
   ev.respondWith(caches.open(VERSION).then(async cache => {
     const guardada = await cache.match(ev.request, { ignoreSearch: true });
-    const deRed = fetch(ev.request)
+    const deRed = fetch(ev.request.url, { cache: 'no-cache' })
       .then(resp => { if (resp.ok) cache.put(ev.request, resp.clone()); return resp; })
       .catch(() => null);
     if (guardada) { ev.waitUntil(deRed); return guardada; }
