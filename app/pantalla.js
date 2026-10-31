@@ -372,7 +372,10 @@
           `${fmt(a.presionBoquilla, 2)} bar en la boquilla · ${fmt(a.caudal, 2)} l/min · alcance ${fmt(a.radio, 1)} m` +
           (asp.x != null ? ` · posición (${fmt(asp.x, 1)}; ${fmt(asp.y, 1)}) m, giro ${Math.round(asp.giro || 0)}°` : ''));
       });
-      L.push(`Total del sector: ${fmt(c.r.caudalTotal, 1)} l/min · variación de presión ${fmt(c.r.variacion, 0)} % · caño recomendado ${c.rec.recomendado ? c.rec.recomendado + ' mm' : 'ninguno cumple'}.`);
+      const caño = s.lateral.escalonado
+        ? 'caño escalonado: ' + R.tramosPorDiametro(c.r.tramos).map(g => `${g.nominal} mm hasta el aspersor ${g.hasta} (${fmt(g.largo, 1)} m)`).join(' → ')
+        : `caño de ${s.lateral.nominal} mm (con un solo diámetro se recomienda ${c.rec.recomendado ? c.rec.recomendado + ' mm' : 'ninguno: no cumple'})`;
+      L.push(`Total del sector: ${fmt(c.r.caudalTotal, 1)} l/min · variación de presión ${fmt(c.r.variacion, 0)} % · ${caño}.`);
       for (const a of c.r.avisos) L.push(`  Aviso (${a.nivel}): ${a.texto}`);
     });
     if (obra.plano && aspersoresDelPlano().length) {
@@ -525,11 +528,11 @@
     s.alimentacion.nominal = Number(opciones($('alim-nominal'), diametros(s.alimentacion.material), s.alimentacion.nominal));
     sincronizarDistancias();
     $('alim-largo').value = s.alimentacion.largo;
-    $('alim-largo').disabled = usaPlano();
+    $('alim-largo').disabled = true;   // colector: medio metro por válvula, lo pone la app
     $('alim-desnivel').value = s.alimentacion.desnivel;
     $('valvula').checked = s.valvula;
     s.lateral.material = opciones($('lat-material'), materiales, s.lateral.material);
-    s.lateral.nominal = Number(opciones($('lat-nominal'), diametros(s.lateral.material), s.lateral.nominal));
+    opciones($('lat-nominal'), [['auto', 'Automático (escalonado)'], ...diametros(s.lateral.material)], s.lateral.escalonado ? 'auto' : s.lateral.nominal);
     $('borrar-sector').hidden = obra.sectores.length === 1;
     armarAspersores();
     pintarSector();
@@ -563,8 +566,14 @@
     'alim-nominal': v => sector().alimentacion.nominal = Number(v),
     'alim-largo': v => sector().alimentacion.largo = decimal(v),
     'alim-desnivel': v => sector().alimentacion.desnivel = decimal(v),
-    'lat-material': v => { sector().lateral.material = v; sector().lateral.nominal = Number(opciones($('lat-nominal'), diametros(v), sector().lateral.nominal)); },
-    'lat-nominal': v => sector().lateral.nominal = Number(v),
+    'lat-material': v => {
+      const l = sector().lateral;
+      l.material = v;
+      const elegido = opciones($('lat-nominal'), [['auto', 'Automático (escalonado)'], ...diametros(v)], l.escalonado ? 'auto' : l.nominal);
+      if (elegido !== 'auto') l.nominal = Number(elegido);
+      else if (!R.CANOS[v].di[l.nominal]) l.nominal = Number(Object.keys(R.CANOS[v].di)[0]);
+    },
+    'lat-nominal': v => { const l = sector().lateral; l.escalonado = v === 'auto'; if (v !== 'auto') l.nominal = Number(v); },
   };
   for (const [id, fn] of Object.entries(enlacesSector)) $(id).addEventListener('input', ev => { fn(ev.target.value); pintarSector(); });
   $('valvula').addEventListener('change', ev => { sector().valvula = ev.target.checked; pintarSector(); });
@@ -685,7 +694,7 @@
     const recorrido = [];
     if (r.fuente.bomba) recorrido.push(`Bomba ${r.fuente.bomba.modelo}: ${fmt(r.fuente.bomba.altura, 1)} m a ${fmt(lpm, 1)} l/min → <b>${fmt(r.fuente.presion, 2)} bar</b> a la salida${obra.fuente.aspiracion ? ` (descontando ${fmt(obra.fuente.aspiracion, 1)} m de aspiración)` : ''}`);
     else recorrido.push(`Fuente: <b>${fmt(r.fuente.presion, 2)} bar</b>`);
-    if (r.alimentacion) recorrido.push(`Caño hasta la válvula (${r.alimentacion.cano}, ${fmt(r.alimentacion.largo, 0)} m): pierde ${fmt(r.alimentacion.perdida, 2)} bar, el agua va a ${fmt(r.alimentacion.velocidad, 2)} m/s`);
+    if (r.alimentacion) recorrido.push(`Colector a la salida de la bomba (${r.alimentacion.cano}, ${fmt(r.alimentacion.largo, 0)} m): pierde ${fmt(r.alimentacion.perdida, 2)} bar, el agua va a ${fmt(r.alimentacion.velocidad, 2)} m/s`);
     recorrido.push(`Llega a la válvula con <b>${fmt(r.presionValvula, 2)} bar</b>`);
     if (sector().valvula) recorrido.push(`La PGV de 1" pierde ${fmt(r.perdidaValvula, 2)} bar → sale con <b>${fmt(r.presionSalidaValvula, 2)} bar</b>`);
     const conManguera = r.aspersores.filter(a => a.manguera > 0);
@@ -701,6 +710,7 @@
       <td class="${a.fuera < 0 ? 'mal' : ''}">${fmt(a.presionBoquilla, 2)}</td>
       <td>${fmt(a.caudal, 2)}</td><td>${fmt(a.radio, 1)}</td>
       <td class="${r.tramos[i].velocidad > R.VELOCIDAD_MAX ? 'mal' : ''}">${fmt(r.tramos[i].velocidad, 2)}</td></tr>`).join('');
+    const escalonado = !!sector().lateral.escalonado, grupos = R.tramosPorDiametro(r.tramos);
     const filasDiam = rec.opciones.map(o => `<tr class="${o.nominal === rec.recomendado ? 'elegido' : ''}">
       <td>${o.nominal} mm</td><td>${fmt(o.caudal, 1)}</td>
       <td class="${o.velocidadMax > R.VELOCIDAD_MAX ? 'mal' : ''}">${fmt(o.velocidadMax, 2)}</td>
@@ -710,8 +720,9 @@
       <div class="cifras">
         <div class="cifra"><b>${fmt(lpm, 1)}</b><span>l/min del sector</span></div>
         <div class="cifra"><b>${fmt(pMin, 2)}</b><span>bar en el aspersor más desfavorable</span></div>
-        <div class="cifra"><b>${rec.recomendado ? rec.recomendado + ' mm' : '—'}</b><span>${rec.recomendado ? 'caño del sector recomendado'
-          : rec.opciones.every(o => o.bajos > 0) ? 'ningún caño alcanza: falta presión en la fuente' : 'ningún caño cumple: ver la tabla de abajo'}</span></div>
+        ${escalonado ? `<div class="cifra"><b>${grupos.map(g => g.nominal).join(' → ')} mm</b><span>caño del sector (automático)</span></div>`
+          : `<div class="cifra"><b>${rec.recomendado ? rec.recomendado + ' mm' : '—'}</b><span>${rec.recomendado ? 'caño del sector recomendado'
+          : rec.opciones.every(o => o.bajos > 0) ? 'ningún caño alcanza: falta presión en la fuente' : 'ningún caño cumple: ver la tabla de abajo'}</span></div>`}
       </div>
       ${avisos}
       <h3>Recorrido del agua</h3>
@@ -721,6 +732,7 @@
         <thead><tr><th>Aspersor</th>${hayReg ? '<th>Entra<br>bar</th>' : ''}<th>Boquilla<br>bar</th><th>l/min</th><th>Alcance<br>m</th><th>Vel.<br>m/s</th></tr></thead>
         <tbody>${filasAsp}</tbody></table></div>
       <h3>Caño del sector: ${R.CANOS[sector().lateral.material].detalle}</h3>
+      ${escalonado ? `<p>${grupos.map(g => `<b>${g.nominal} mm</b> ${g.desde === g.hasta ? `hasta el aspersor ${g.hasta}` : `del aspersor ${g.desde} al ${g.hasta}`} (${fmt(g.largo, 1)} m)`).join(' → ')}${grupos.length > 1 ? `, con ${grupos.length - 1} ${grupos.length === 2 ? 'reducción' : 'reducciones'}` : ''}.</p><p class="ayuda">Así quedaría con un solo diámetro:</p>` : ''}
       <div class="tabla"><table>
         <thead><tr><th>Diámetro</th><th>l/min</th><th>Vel. máx.<br>m/s</th><th>Variación<br>presión</th><th>Cumple</th></tr></thead>
         <tbody>${filasDiam}</tbody></table></div>
@@ -903,7 +915,7 @@
     ['Cuerpos y turbinas', c => c.startsWith('cuerpo-') || c.startsWith('turbina-')],
     ['Boquillas', c => c.startsWith('boq-')],
     ['Caños', c => c.startsWith('cano-')],
-    ['Manguera y conexiones', c => /^(manguera|conector|espiga|tapon|codo|pegamento|conexion)-/.test(c)],
+    ['Manguera y conexiones', c => /^(manguera|conector|espiga|tapon|codo|te|reduccion|pegamento|conexion)-/.test(c)],
     ['Válvulas, caja y programador', c => /^(valvula|caja|programador)/.test(c)],
     ['Bombas', c => c.startsWith('bomba-')],
     ['Conexiones', c => true],

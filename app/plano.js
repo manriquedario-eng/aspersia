@@ -17,6 +17,8 @@
   let cuadro = 0;
   let marcando = null;   // { tipo, n, etiquetas, puntos: [{x, y}], alMarcar(n), alTerminar(...puntos) } mientras se marcan puntos con toques
   let midiendo = null;   // { zona, lado } o { esperando: true }: elegir el lado de una zona que se conoce, para escalar
+  let editandoZona = null; // índice de la zona que se está editando (las demás quedan fijas)
+  let ultimoSector = null; // sector con el que se trabajó último (para "+ Aspersor")
   const plano = () => ctx.obra.plano;
   const Y = y => plano().largo - y;          // del plano (y hacia arriba) al SVG (y hacia abajo)
   const el = (tag, attrs = {}, padre) => {
@@ -95,10 +97,11 @@
       cob = G.cobertura(t, asps, Math.max(0.1, Math.min(0.25, Math.max(t.ancho, t.largo) / 240)), zonas);
       el('image', { href: imagenCobertura(cob), x: 0, y: 0, width: t.ancho, height: t.largo, preserveAspectRatio: 'none', class: t.fondo ? 'cobertura sobre-fondo' : 'cobertura' }, svg);
     }
-    // Borde de cada zona (se toca el borde para elegirla), esquinas y medidas de los lados si está elegida
+    // Borde de cada zona (se toca el borde para elegirla). La zona queda fija: las esquinas y las medidas de los
+    // lados aparecen solo con "Editar zona" (o mientras se elige el lado que se conoce).
     zonas.forEach((z, k) => {
-      const elegida = (seleccion?.tipo === 'zona' || seleccion?.tipo === 'vertice') && seleccion.s === k;
-      el('polygon', { points: z.map(P).join(' '), 'stroke-width': 2.5 * escala, class: `zona ${elegida ? 'elegida' : ''}` }, svg);
+      const elegida = editandoZona === k;
+      el('polygon', { points: z.map(P).join(' '), 'stroke-width': 2.5 * escala, class: `zona ${elegida || (seleccion?.tipo === 'zona' && seleccion.s === k) ? 'elegida' : ''}` }, svg);
       el('polygon', { points: z.map(P).join(' '), 'stroke-width': 16 * escala, 'data-zona': k, class: 'zona-tocar' }, svg);
       if (midiendo?.zona === k) {
         const a = z[midiendo.lado], b = z[(midiendo.lado + 1) % z.length];
@@ -129,22 +132,43 @@
       const [tag, attrs] = forma(a);
       el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
     }
-    // Caños: de la fuente a cada válvula y, por sector, el ramal dibujado (caño principal, línea punteada gruesa)
-    // con una manguera recta desde cada aspersor hasta el caño. Sin ramal, el caño pasa por los aspersores en orden.
+    // Caños: las válvulas van juntas a la salida de la bomba; de cada una sale el caño de su sector. Con el caño
+    // dibujado, cada tramo se ve con el grosor de su diámetro (escalonado: más grueso al salir) y cada aspersor
+    // tira su manguera recta hasta el caño. Sin dibujar, el caño pasa por los aspersores en orden.
+    O().ubicarValvulas(ctx.obra);
     const sectores = ctx.obra.sectores;
     const canos = el('g', { class: 'canos' }, svg);
     const rf = 9 * escala;
     const guiones = { 'stroke-dasharray': `${6 * escala} ${4 * escala}`, fill: 'none' };
+    const grosor = nominal => Math.max(2, nominal / 10) * escala;   // 32 mm → 3,2 px; 63 mm → 6,3 px
     sectores.forEach((s, k) => {
       if (soloSector != null && k !== soloSector) return;
       const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
+      const diametros = O().diametrosDelSector(ctx.obra, s);
       if (!O().tieneRamal(s)) {
-        el('polyline', { points: [t.fuente, s.valvulaPos, ...ubicados].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 2 * escala, ...guiones }, canos);
+        el('polyline', { points: [s.valvulaPos, ...ubicados].map(P).join(' '), stroke: colorSector(k), 'stroke-width': grosor(diametros[0] || 32), ...guiones }, canos);
         return;
       }
-      el('polyline', { points: [t.fuente, s.valvulaPos].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 2 * escala, ...guiones }, canos);
-      el('polyline', { points: [s.valvulaPos, ...s.ramal].map(P).join(' '), stroke: colorSector(k), 'stroke-width': 4 * escala, ...guiones, class: 'ramal' }, canos);
-      for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados)) {
+      const linea = [s.valvulaPos, ...s.ramal], largo = G.largoDeLinea(linea);
+      const conexiones = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados);
+      // Tramos del mismo diámetro: desde la válvula (o el último cambio) hasta la conexión donde cambia
+      let desde = 0, recorrido = 0;
+      const cortes = [];
+      conexiones.forEach((c, n) => {
+        recorrido += c.tramo;
+        const d = diametros[n] ?? diametros.at(-1), siguiente = diametros[n + 1];
+        if (siguiente != null && siguiente !== d) { cortes.push({ desde, hasta: recorrido, d }); desde = recorrido; }
+      });
+      cortes.push({ desde, hasta: largo, d: diametros[Math.max(0, conexiones.length - 1)] ?? diametros.at(-1) ?? 32 });
+      for (const tr of cortes) {
+        const pts = G.subLinea(linea, tr.desde, tr.hasta);
+        if (pts.length < 2) continue;
+        el('polyline', { points: pts.map(P).join(' '), stroke: colorSector(k), 'stroke-width': grosor(tr.d), ...guiones, class: 'ramal' }, canos);
+        const medio = G.subLinea(linea, (tr.desde + tr.hasta) / 2, (tr.desde + tr.hasta) / 2)[0] || pts[0];   // etiqueta en la mitad del tramo
+        const txt = el('text', { x: medio.x, y: Y(medio.y) - 6 * escala, 'font-size': 10 * escala, 'stroke-width': 3 * escala, class: 'texto-diametro' }, canos);
+        txt.textContent = `${tr.d} mm`;
+      }
+      for (const c of conexiones) {
         const a = ubicados[c.i];
         el('line', { x1: a.x, y1: Y(a.y), x2: c.punto.x, y2: Y(c.punto.y), stroke: colorSector(k), 'stroke-width': 1.5 * escala, class: 'manguera' }, canos);
         el('circle', { cx: c.punto.x, cy: Y(c.punto.y), r: 2.5 * escala, fill: colorSector(k) }, canos);
@@ -156,16 +180,20 @@
         el('rect', { x: p.x - rf * 0.45, y: Y(p.y) - rf * 0.45, width: rf * 0.9, height: rf * 0.9, stroke: colorSector(k), 'stroke-width': 1.5 * escala, class: 'codo' }, g);
       });
     });
-    // Fuente
+    // Bomba (o canilla) con su nombre; se arrastra y las válvulas van con ella
     const f = el('g', { 'data-mover': 'fuente', class: `pieza ${seleccion?.tipo === 'fuente' ? 'elegida' : ''}` }, svg);
     el('circle', { cx: t.fuente.x, cy: Y(t.fuente.y), r: rf * 2.2, class: 'tocar' }, f);
-    el('polygon', { points: `${t.fuente.x},${Y(t.fuente.y) - rf} ${t.fuente.x - rf},${Y(t.fuente.y) + rf * 0.8} ${t.fuente.x + rf},${Y(t.fuente.y) + rf * 0.8}`, class: 'fuente' }, f);
-    // Válvulas
+    el('circle', { cx: t.fuente.x, cy: Y(t.fuente.y), r: rf, class: 'fuente' }, f);
+    const etiqueta = el('text', { x: t.fuente.x, y: Y(t.fuente.y) + rf * 2.4, 'font-size': rf * 1.2, 'stroke-width': 3 * escala, class: 'texto-fuente' }, f);
+    etiqueta.textContent = ctx.obra.fuente.tipo === 'bomba' ? 'Bomba' : 'Canilla';
+    // Válvulas: a la salida de la bomba, con el número de su sector (se tocan para dibujar el caño del sector)
     sectores.forEach((s, k) => {
       if (soloSector != null && k !== soloSector) return;
-      const v = el('g', { 'data-mover': 'valvula', 'data-s': k, class: `pieza ${seleccion?.tipo === 'valvula' && seleccion.s === k ? 'elegida' : ''}` }, svg);
-      el('circle', { cx: s.valvulaPos.x, cy: Y(s.valvulaPos.y), r: rf * 2.2, class: 'tocar' }, v);
-      el('rect', { x: s.valvulaPos.x - rf * 0.8, y: Y(s.valvulaPos.y) - rf * 0.8, width: rf * 1.6, height: rf * 1.6, fill: colorSector(k), class: 'valvula' }, v);
+      const v = el('g', { 'data-mover': 'fuente', class: `pieza ${seleccion?.tipo === 'fuente' ? 'elegida' : ''}` }, svg);
+      el('circle', { cx: s.valvulaPos.x, cy: Y(s.valvulaPos.y), r: rf * 1.3, class: 'tocar' }, v);
+      el('rect', { x: s.valvulaPos.x - rf * 0.7, y: Y(s.valvulaPos.y) - rf * 0.7, width: rf * 1.4, height: rf * 1.4, fill: colorSector(k), class: 'valvula' }, v);
+      const n = el('text', { x: s.valvulaPos.x, y: Y(s.valvulaPos.y) + rf * 0.4, 'font-size': rf * 1, class: 'numero-plano' }, v);
+      n.textContent = k + 1;
     });
     // Puntos marcados con toques (para escalar con una medida conocida)
     svg.classList.toggle('calibrando', !!marcando);
@@ -192,6 +220,28 @@
       el('circle', { cx: a.x, cy: Y(a.y), r: rf, fill: colorSector(a.s), class: 'cabeza' }, g);
       const txt = el('text', { x: a.x, y: Y(a.y) + rf * 0.4, 'font-size': rf * 1.15, class: 'numero-plano' }, g);
       txt.textContent = a.i + 1;
+    }
+    // Aspersor elegido: agarraderas sobre el borde del abanico. La del medio lo gira; las de las puntas abren o
+    // cierran el arco (parejo de los dos lados). El largo no cambia: es el alcance real según la presión.
+    const elegido = seleccion?.tipo === 'asp' && !marcando ? asps.find(a => a.s === seleccion.s && a.i === seleccion.i) : null;
+    if (elegido && !elegido.franja) {
+      const arco = gesto?.tipo === 'asa' && gesto.asa === 'arco' ? gesto.arco : elegido.arco;
+      const giro = elegido.giro;
+      if (gesto?.tipo === 'asa' && gesto.asa === 'arco') {
+        const [tag, attrs] = forma({ ...elegido, arco });
+        el(tag, { ...attrs, fill: colorSector(elegido.s), 'fill-opacity': 0.25, stroke: 'var(--agua)', 'stroke-width': 2 * escala, 'stroke-dasharray': `${4 * escala} ${3 * escala}` }, svg);
+      }
+      const punto = rumbo => ({ x: elegido.x + elegido.radio * Math.sin(rumbo * Math.PI / 180), y: elegido.y + elegido.radio * Math.cos(rumbo * Math.PI / 180) });
+      const asa = (p, tipo, clase) => {
+        const g = el('g', { 'data-asa': tipo, class: 'pieza' }, svg);
+        el('circle', { cx: p.x, cy: Y(p.y), r: rf * 2, class: 'tocar' }, g);
+        el('circle', { cx: p.x, cy: Y(p.y), r: rf * 0.75, 'stroke-width': 1.5 * escala, class: `asa ${clase}` }, g);
+      };
+      asa(punto(giro), 'girar', 'asa-girar');
+      if (arco < 360) { asa(punto(giro - arco / 2), 'arco', 'asa-arco'); asa(punto(giro + arco / 2), 'arco', 'asa-arco'); }
+      else asa(punto(giro + 180), 'arco', 'asa-arco');
+      const txt = el('text', { x: punto(giro).x, y: Y(punto(giro).y) - rf * 1.4, 'font-size': rf * 1.3, 'stroke-width': 3 * escala, class: 'texto-diametro' }, svg);
+      txt.textContent = `${Math.round(arco)}°`;
     }
     if (ctx.rosa) ctx.rosa.style.transform = `rotate(${t.norte || 0}deg)`;
     pintarDatos(cob, t.verSol);
@@ -242,8 +292,8 @@
       texto = `Tocá por dónde va el caño (${n})`;
       botones = [b('data-ramal', 'deshacer', 'Deshacer', '', !n), b('data-ramal', 'listo', 'Listo', 'activo', !n), b('data-ramal', 'cancelar', 'Cancelar')];
     } else if (marcando?.tipo === 'aspersores') {
-      texto = `Tocá dónde va cada aspersor (${marcando.puestos})`;
-      botones = [b('data-modo-accion', 'cancelar', 'Listo', 'activo')];
+      texto = 'Tocá dónde va el aspersor';
+      botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
     } else if (marcando?.tipo === 'ubicar') {
       texto = 'Tocá dónde va el aspersor';
       botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
@@ -282,10 +332,9 @@
       return;
     }
     if (marcando?.tipo === 'aspersores') {
-      caja.innerHTML = `<p class="sel-titulo">Agregar aspersores a ${nombre(marcando.s)}</p>
-        <p class="ayuda">Tocá en el plano dónde va cada aspersor. Sale con la misma tobera que el último; después lo tocás para cambiarle el arco y hacia dónde apunta.</p>
-        <p class="ayuda"><b>${marcando.puestos}</b> ${marcando.puestos === 1 ? 'agregado' : 'agregados'}.</p>
-        ${botones([['cancelar', 'Listo', 'activo']])}`;
+      caja.innerHTML = `<p class="sel-titulo">Agregar un aspersor a ${nombre(marcando.s)}</p>
+        <p class="ayuda">Tocá en el plano dónde va. Sale con la misma tobera que el último y queda elegido para acomodarlo, girarlo y abrirle el arco.</p>
+        ${botones([['cancelar', 'Cancelar']])}`;
       return;
     }
     if (marcando?.tipo === 'elegir-sector') {
@@ -318,17 +367,30 @@
     }
     if (seleccion.tipo === 'zona' || seleccion.tipo === 'vertice') {
       const z = plano().zonas[seleccion.s];
-      caja.innerHTML = `<p class="sel-titulo">Zona a regar ${seleccion.s + 1}: ${fmt1(G.areaPoligono(z))} m²</p>
-        <p class="ayuda">Arrastrá los puntitos de las esquinas para acomodarla. Las medidas de los lados están en el plano.</p>
-        ${botones([['medir', 'Escalar con un lado'], ...(seleccion.tipo === 'vertice' && z.length > 3 ? [['quitar-esquina', 'Quitar esta esquina']] : []), ['quitar-zona', 'Quitar zona', 'peligro']])}`;
+      caja.innerHTML = editandoZona === seleccion.s
+        ? `<p class="sel-titulo">Editando la zona ${seleccion.s + 1}: ${fmt1(G.areaPoligono(z))} m²</p>
+          <p class="ayuda">Arrastrá los puntitos de las esquinas para acomodarla. Las medidas de los lados están en el plano.</p>
+          ${botones([['zona-terminar', 'Listo', 'activo'], ['medir', 'Escalar con un lado'], ...(seleccion.tipo === 'vertice' && z.length > 3 ? [['quitar-esquina', 'Quitar esta esquina']] : [])])}`
+        : `<p class="sel-titulo">Zona a regar ${seleccion.s + 1}: ${fmt1(G.areaPoligono(z))} m²</p>
+          <p class="ayuda">La zona y su medida quedan fijas para no moverlas sin querer.</p>
+          ${botones([['editar-zona', 'Editar zona'], ['quitar-zona', 'Quitar zona', 'peligro']])}`;
       return;
     }
     const obj = objeto(seleccion);
-    let titulo = 'Fuente de agua (bomba o llave)';
+    let titulo = ctx.obra.fuente.tipo === 'bomba' ? 'Bomba y válvulas' : 'Canilla y válvulas';
     let giro = '';
+    if (seleccion.tipo === 'fuente') {
+      // Un renglón por sector: su válvula está a la salida de la bomba y de ahí sale su caño
+      const filas = ctx.obra.sectores.map((s, k) => {
+        const tiene = O().tieneRamal(s);
+        return `<div class="fila-sector"><span><i style="background:${colorSector(k)}"></i>${nombre(k).replace(/[<>&]/g, '')}${tiene ? `: ${fmt1(O().largoRamal(s))} m de caño, ${O().codosRamal(s)} ${O().codosRamal(s) === 1 ? 'codo' : 'codos'}` : ': caño sin dibujar'}</span>
+          <span><button type="button" class="chico" data-ramal="dibujar" data-s="${k}">${tiene ? 'Dibujar de nuevo' : 'Dibujar caño'}</button>${tiene ? `<button type="button" class="chico peligro" data-ramal="borrar" data-s="${k}">Borrar</button>` : ''}</span></div>`;
+      }).join('');
+      giro = `<p class="ayuda">Las válvulas van juntas a la salida de la bomba; de cada una sale el caño de su sector. Arrastrá la bomba para ubicarla.</p>${filas}`;
+    }
     if (seleccion.tipo === 'valvula') {
       const s = ctx.obra.sectores[seleccion.s];
-      titulo = `Válvula de ${nombre(seleccion.s)}`;
+      titulo = `Válvula de ${nombre(seleccion.s)} (a la salida de la bomba)`;
       giro = O().tieneRamal(s)
         ? `<p class="ayuda">Caño principal: <b>${fmt1(O().largoRamal(s))} m</b>, ${O().codosRamal(s)} ${O().codosRamal(s) === 1 ? 'codo' : 'codos'}. Cada aspersor va con su manguera hasta el caño. Para acomodarlo, arrastrá los cuadraditos.</p>
           <div class="giros"><button type="button" class="chico" data-ramal="dibujar">Dibujar de nuevo</button><button type="button" class="chico peligro" data-ramal="borrar">Borrar caño</button></div>`
@@ -353,8 +415,9 @@
         <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`)
         + botones([['quitar-asp', 'Quitar aspersor', 'peligro']]);
     }
+    // La válvula no se ubica a mano: va a la salida de la bomba
     caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>
-      <div class="campos dos">
+      <div class="campos dos" ${seleccion.tipo === 'valvula' ? 'hidden' : ''}>
         <label>X <span class="unidad">m desde la izquierda</span><input type="number" inputmode="decimal" step="0.1" data-sel="x" value="${obj.x}"></label>
         <label>Y <span class="unidad">m desde abajo</span><input type="number" inputmode="decimal" step="0.1" data-sel="y" value="${obj.y}"></label>
       </div>${giro}`;
@@ -409,15 +472,16 @@
       alMarcar: () => pintarSeleccion(), alTerminar: () => {} };
     pintar();
   }
-  function accionRamal(accion) {
+  function accionRamal(accion, k) {
     const r2 = v => Math.round(v * 100) / 100;
-    if (accion === 'dibujar') return dibujarRamal(seleccion.s);
+    if (accion === 'dibujar') return dibujarRamal(k ?? seleccion.s);
     if (marcando?.tipo === 'ramal') {
       const k = marcando.s;
       if (accion === 'deshacer') { marcando.puntos.pop(); return pintar(); }
       if (accion === 'listo' && marcando.puntos.length) ctx.obra.sectores[k].ramal = marcando.puntos.map(p => ({ x: r2(p.x), y: r2(p.y) }));
       marcando = null;
-      seleccion = { tipo: 'valvula', s: k };
+      seleccion = { tipo: 'fuente' };
+      ultimoSector = k;
       avisarCambio(true);
       return pintar();
     }
@@ -425,7 +489,8 @@
       const s = ctx.obra.sectores[seleccion.s];
       s.ramal.splice(seleccion.i, 1);
       if (!s.ramal.length) delete s.ramal;
-      seleccion = { tipo: 'valvula', s: seleccion.s };
+      ultimoSector = seleccion.s;
+      seleccion = { tipo: 'fuente' };
       avisarCambio(true);
       return pintar();
     }
@@ -438,10 +503,12 @@
     marcando = { tipo: 'zona', n: Infinity, etiquetas: null, puntos: [], alMarcar: () => pintarSeleccion(), alTerminar: () => {} };
     pintar();
   }
-  // "+ Aspersor": cada toque agrega uno en el sector elegido, con la misma tobera que el último del sector.
+  // "+ Aspersor": un toque pone UN aspersor en el sector elegido (con la misma tobera que el último) y lo deja elegido,
+  // para acomodarlo, girarlo y abrirle el arco enseguida. Para el siguiente, otra vez "+ Aspersor".
   function agregarAspersores(k) {
     seleccion = null;
     if (k == null) { marcando = { tipo: 'elegir-sector', n: 0, puntos: [] }; return pintar(); }
+    ultimoSector = k;
     marcando = { tipo: 'aspersores', s: k, n: Infinity, etiquetas: [], puntos: [], puestos: 0,
       alMarcar: () => {
         const s = ctx.obra.sectores[k], p = marcando.puntos.pop();
@@ -456,8 +523,10 @@
         const giro = centro ? Math.round(G.rumbo(centro.x - p.x, centro.y - p.y) / 5) * 5 % 360 : (base.giro ?? 0);
         s.aspersores.push({ ...tobera, x: r1(p.x), y: r1(p.y), giro,
           distancia: r1(Math.hypot(p.x - anterior.x, p.y - anterior.y)) || 1, manguera: base.manguera ?? 1 });
-        marcando.puestos++;
-        avisarCambio(true);
+        marcando = null;
+        avisoArco = '';
+        seleccion = { tipo: 'asp', s: k, i: s.aspersores.length - 1 };
+        avisarCambio(true);   // con caño dibujado se reordena: la selección sigue al mismo aspersor
         pintar();
       } };
     pintar();
@@ -482,6 +551,7 @@
     G.escalarPlano(plano(), ctx.obra.sectores, k);
     if (plano().fondo) plano().fondo.escala = { metros: valor };
     midiendo = null;
+    editandoZona = null;
     avisarCambio(true);
     ctx.alEscalar?.();
     ajustar(); pintar();
@@ -499,13 +569,16 @@
         (plano().zonas ||= []).push(z);
         marcando = null;
         seleccion = { tipo: 'zona', s: plano().zonas.length - 1 };
+        editandoZona = seleccion.s;
         midiendo = { esperando: true };   // enseguida: ¿qué lado conocés?
         avisarCambio(false);
         pintar();
       },
       'medir': () => { midiendo = { esperando: true }; pintar(); },
       'medir-otro': () => { midiendo = { esperando: true }; pintar(); },
-      'medir-cancelar': () => { midiendo = null; pintar(); },
+      'medir-cancelar': () => { midiendo = null; editandoZona = null; pintar(); },
+      'editar-zona': () => { editandoZona = seleccion.s; pintar(); },
+      'zona-terminar': () => { editandoZona = null; midiendo = null; seleccion = null; pintar(); },
       'medir-aplicar': () => aplicarMedida(parseFloat(String([ctx.flotante, ctx.seleccion].map(c => c?.querySelector('[data-medida-real]')?.value).find(v => v)).replace(',', '.'))),
       'quitar-esquina': () => {
         plano().zonas[seleccion.s].splice(seleccion.i, 1);
@@ -519,15 +592,19 @@
   function ajustar() {
     const t = plano(), m = Math.max(0.5, Math.max(t.ancho, t.largo) * 0.03);
     const svg = ctx.svg;
+    // A la derecha van los botones de zoom: el terreno se acomoda a su izquierda, para que ninguna esquina
+    // de la foto quede debajo de un botón.
+    const BOTONES = 52;
+    const libre = Math.max(100, (svg.clientWidth || 300) - BOTONES);
     // El cuadro del plano toma la forma del terreno (una captura parada ocupa casi toda la pantalla del teléfono)
     if (svg.clientWidth) {
-      const alto = Math.round(Math.min(window.innerHeight * 0.68, Math.max(260, svg.clientWidth * (t.largo + 2 * m) / (t.ancho + 2 * m))));
+      const alto = Math.round(Math.min(window.innerHeight * 0.68, Math.max(260, libre * (t.largo + 2 * m) / (t.ancho + 2 * m))));
       if (Math.abs(svg.clientHeight - alto) > 2) svg.style.height = `${alto}px`;
     }
-    const proporcion = (svg.clientHeight || 300) / (svg.clientWidth || 300);
-    let w = t.ancho + 2 * m, h = t.largo + 2 * m;
-    if (h / w > proporcion) w = h / proporcion; else h = w * proporcion;
-    vista = { x: t.ancho / 2 - w / 2, y: t.largo / 2 - h / 2, w, h };
+    const ancho = svg.clientWidth || 300, alto = svg.clientHeight || 300;
+    const k = Math.max((t.ancho + 2 * m) / libre, (t.largo + 2 * m) / alto);   // metros por pixel
+    const w = ancho * k, h = alto * k;
+    vista = { x: t.ancho / 2 - libre * k / 2, y: t.largo / 2 - h / 2, w, h };
   }
   function zoom(factor, cx, cy) {
     cx ??= vista.x + vista.w / 2; cy ??= vista.y + vista.h / 2;
@@ -553,11 +630,21 @@
       gesto = { tipo: 'pellizco', dist: Math.hypot(a.x - b.x, a.y - b.y), vista: { ...vista } };
       return;
     }
+    // Agarraderas del abanico del aspersor elegido: girar o abrir/cerrar el arco
+    const asa = !marcando ? ev.target.closest('[data-asa]') : null;
+    if (asa) {
+      const a = ctx.aspersores().find(x => x.s === seleccion.s && x.i === seleccion.i);
+      gesto = { tipo: 'asa', asa: asa.dataset.asa, arco: a?.arco ?? 180, x0: ev.clientX, y0: ev.clientY, movio: false };
+      return;
+    }
     // Mientras se marcan puntos, agarrar uno ya marcado lo corrige (no mueve el mapa)
     const marca = marcando ? ev.target.closest('[data-marca]') : null;
     if (marca) { gesto = { tipo: 'moverMarca', k: Number(marca.dataset.marca), x0: ev.clientX, y0: ev.clientY, movio: false }; return; }
     // Al marcar, un toque marca y no agarra piezas; al elegir el lado que se conoce, las esquinas se siguen pudiendo arrastrar
-    const pieza = marcando ? null : ev.target.closest(midiendo ? '[data-mover="vertice"]' : '[data-mover]');
+    // Con "+ Aspersor" activo, tocar un aspersor que ya está lo elige (no pone otro encima)
+    const agregando = marcando?.tipo === 'aspersores' ? ev.target.closest('[data-mover="asp"]') : null;
+    if (agregando) marcando = null;
+    const pieza = agregando || (marcando ? null : ev.target.closest(midiendo ? '[data-mover="vertice"]' : '[data-mover]'));
     const zona = !marcando && !midiendo && !pieza ? ev.target.closest('[data-zona]') : null;
     const p = aSVG(ev);
     if (pieza) {
@@ -585,12 +672,23 @@
       vista = { ...gesto.vista, x: gesto.vista.x - mx * porPixel, y: gesto.vista.y - my * porPixel };
       return repintar();
     }
+    if (gesto.tipo === 'asa') {
+      const p = aSVG(ev), obj = objeto(seleccion);
+      const rumbo = G.rumbo(p.x - obj.x, (plano().largo - p.y) - obj.y);
+      if (gesto.asa === 'girar') obj.giro = (Math.round(rumbo / 5) * 5) % 360;
+      else {
+        const arco = Math.round(2 * G.difAngulo(rumbo, obj.giro || 0) / 5) * 5;
+        gesto.arco = arco >= 355 ? 360 : Math.max(5, arco);
+      }
+      return repintar();
+    }
     if (gesto.tipo === 'moverMarca' && marcando?.puntos[gesto.k]) {
       const p = aSVG(ev);
       marcando.puntos[gesto.k] = { x: p.x, y: plano().largo - p.y };
       return repintar();
     }
     if (gesto.tipo === 'mover') {
+      if (gesto.sel.tipo === 'valvula') return;   // las válvulas van a la salida de la bomba: se mueve la bomba
       const p = aSVG(ev), t = plano();
       const obj = objeto(gesto.sel);
       obj.x = r1(Math.min(t.ancho, Math.max(0, p.x + gesto.dx)));
@@ -602,12 +700,16 @@
   function alSoltar(ev) {
     punteros.delete(ev.pointerId);
     if (!gesto) return;
-    if (gesto.tipo === 'moverMarca') {
+    if (gesto.tipo === 'asa') {
+      if (gesto.movio && gesto.asa === 'arco') elegirArco(gesto.arco);   // aplica las reglas de Hunter (fija → ajustable, MP 90-270°)
+      else { if (gesto.movio) avisarCambio(false); pintar(); }
+    } else if (gesto.tipo === 'moverMarca') {
       // Tocar (sin arrastrar) la primera esquina cierra la zona
       if (!gesto.movio && gesto.k === 0 && marcando?.tipo === 'zona' && marcando.puntos.length > 2) accionModo('zona-listo')();
       else pintar();
     } else if (gesto.tipo === 'mover') {
       if (!gesto.movio) { if (!mismaPieza(seleccion, gesto.sel)) avisoArco = ''; seleccion = gesto.sel; }
+      if (gesto.sel.tipo === 'asp' || gesto.sel.tipo === 'codo') ultimoSector = gesto.sel.s;
       avisarCambio(gesto.movio);
       pintar();
     } else if (gesto.tipo === 'mirar' && !gesto.movio && midiendo?.esperando) {
@@ -640,6 +742,8 @@
     marcando = null;
     avisoArco = '';
     midiendo = null;
+    editandoZona = null;
+    ultimoSector = null;
     if (soloSector != null && soloSector >= ctx.obra.sectores.length) soloSector = null;
     if (primera) {
       const svg = ctx.svg;
@@ -678,11 +782,11 @@
           // Borrar el caño entero pide un segundo toque
           if (ramal.dataset.ramal === 'borrar') {
             if (!ramal.dataset.confirmar) { ramal.dataset.confirmar = '1'; ramal.textContent = 'Tocá de nuevo para borrar'; return; }
-            delete ctx.obra.sectores[seleccion.s].ramal;
+            delete ctx.obra.sectores[ramal.dataset.s != null ? Number(ramal.dataset.s) : seleccion.s].ramal;
             avisarCambio(true);
             return pintar();
           }
-          return accionRamal(ramal.dataset.ramal);
+          return accionRamal(ramal.dataset.ramal, ramal.dataset.s != null ? Number(ramal.dataset.s) : undefined);
         }
         const sectorNuevo = ev.target.closest('[data-sector-nuevo]');
         if (sectorNuevo) return agregarAspersores(Number(sectorNuevo.dataset.sectorNuevo));
@@ -718,7 +822,7 @@
         else if (b.dataset.plano === 'zona') dibujarZona();
         else {
           const sectores = ctx.obra.sectores;
-          const delElegido = ['asp', 'valvula', 'codo'].includes(seleccion?.tipo) ? seleccion.s : null;
+          const delElegido = ['asp', 'codo'].includes(seleccion?.tipo) ? seleccion.s : ultimoSector;
           agregarAspersores(soloSector ?? (sectores.length === 1 ? 0 : delElegido));
         }
         ctx.svg.scrollIntoView({ behavior: 'smooth', block: 'center' });

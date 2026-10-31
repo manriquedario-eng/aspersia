@@ -182,7 +182,8 @@
   //   fuente: { tipo: 'presion', bar } | { tipo: 'bomba', linea, modelo, aspiracion (m que la bomba sube el agua al aspirar) },
   //   alimentacion: { material, nominal, largo, desnivel },   // de la fuente a la válvula; desnivel en m (+ si la válvula está más alta)
   //   valvula: true | false,                                    // electroválvula PGV de 1"
-  //   lateral: { material, nominal },                           // caño del sector, después de la válvula
+  //   lateral: { material, nominal, tramos? },                  // caño del sector, después de la válvula;
+  //       tramos: [nominal de cada tramo] para un caño escalonado (tramo i = el que llega al aspersor i)
   //   manguera: 'pe-12' | null,                                 // manguera del conector inicial a cada aspersor
   //   aspersores: [{ emisor, regulador: null | 'PRS30' | 'PRS40', distancia, altura, manguera }],
   //       distancia: metros de caño desde el punto anterior (la válvula o el aspersor anterior)
@@ -197,6 +198,7 @@
       ? { ...cano(sector.alimentacion.material, sector.alimentacion.nominal), largo: sector.alimentacion.largo, desnivel: sector.alimentacion.desnivel || 0 }
       : null;
     const lat = cano(sector.lateral.material, sector.lateral.nominal);
+    const latTramo = i => sector.lateral.tramos?.[i] ? { ...cano(sector.lateral.material, sector.lateral.tramos[i]), nominal: sector.lateral.tramos[i] } : { ...lat, nominal: sector.lateral.nominal };
     const mang = sector.manguera ? MANGUERAS[sector.manguera] : null;
     if (sector.manguera && !mang) throw new Error('Manguera desconocida: ' + sector.manguera);
     const asps = sector.aspersores.map((a, i) => ({
@@ -241,10 +243,11 @@
       for (let i = 0; i < asps.length; i++) {
         const a = asps[i];
         const qTramo = caudales.slice(i).reduce((s, v) => s + v, 0);
-        const friccion = perdidaCano(qTramo, a.distancia, lat.di, lat.C) * acc;
+        const ct = latTramo(i);
+        const friccion = perdidaCano(qTramo, a.distancia, ct.di, ct.C) * acc;
         p -= friccion + (a.altura - alturaAnterior) / MCA_POR_BAR;
         alturaAnterior = a.altura;
-        tramos.push({ hasta: a.n, largo: a.distancia, caudal: qTramo, perdida: friccion, velocidad: velocidad(qTramo, lat.di) });
+        tramos.push({ hasta: a.n, largo: a.distancia, nominal: ct.nominal, caudal: qTramo, perdida: friccion, velocidad: velocidad(qTramo, ct.di) });
         // Derivación al aspersor: conector inicial + manguera + espiga en L. Pierde solo con el caudal de ese
         // aspersor y no cambia la presión del caño para los que siguen.
         const perdManguera = a.manguera > 0 ? perdidaCano(caudales[i], a.manguera + ACCESORIOS_MANGUERA_M, mang.di, mang.C) : 0;
@@ -328,7 +331,7 @@
   function recomendarDiametro(sector) {
     const tipo = CANOS[sector.lateral.material];
     const opciones = Object.keys(tipo.di).map(Number).sort((a, b) => a - b).map(nominal => {
-      const r = calcularSector({ ...sector, lateral: { ...sector.lateral, nominal } });
+      const r = calcularSector({ ...sector, lateral: { material: sector.lateral.material, nominal } });
       const vMax = Math.max(...r.tramos.map(t => t.velocidad));
       const bajos = r.aspersores.filter(a => a.fuera < 0).length;
       return { nominal, velocidadMax: vMax, variacion: r.variacion, caudal: r.caudalTotal, bajos,
@@ -336,6 +339,44 @@
     });
     const elegida = opciones.find(o => o.cumple) || null;
     return { recomendado: elegida ? elegida.nominal : null, opciones };
+  }
+
+  // Caño escalonado (Darío: en tirones largos se sale grueso de la bomba y se va reduciendo, por ejemplo 63 → 50 → 40 mm).
+  // Por cada tramo pasa el agua de los aspersores que quedan adelante: se elige el diámetro más chico que la lleva
+  // a 1,5 m/s o menos, sin agrandarse hacia el final. Si la presión entre aspersores varía más del 20 %, se agranda
+  // el tramo que más pierde (y los de antes, para que nunca crezca hacia el final) hasta que cumpla o no haya más grande.
+  function escalonar(sector) {
+    const tipo = CANOS[sector.lateral.material];
+    const nominales = Object.keys(tipo.di).map(Number).sort((a, b) => a - b);
+    const calc = tramos => calcularSector({ ...sector, lateral: { ...sector.lateral, tramos } });
+    const n = sector.aspersores.length;
+    let tramos = Array(n).fill(nominales.at(-1));
+    for (let vuelta = 0; vuelta < 3; vuelta++) {
+      const r = calc(tramos);
+      const nuevo = r.tramos.map(t => nominales.find(d => velocidad(t.caudal, tipo.di[d]) <= VELOCIDAD_MAX) ?? nominales.at(-1));
+      for (let i = 1; i < n; i++) nuevo[i] = Math.min(nuevo[i], nuevo[i - 1]);
+      tramos = nuevo;
+    }
+    let r = calc(tramos);
+    for (let guarda = 0; r.variacion > VARIACION_MAX && guarda < 40; guarda++) {
+      const cand = r.tramos.map((t, i) => ({ i, perdida: t.perdida })).filter(c => tramos[c.i] < nominales.at(-1)).sort((a, b) => b.perdida - a.perdida);
+      if (!cand.length) break;
+      const i = cand[0].i, d = nominales[nominales.indexOf(tramos[i]) + 1];
+      for (let j = 0; j <= i; j++) tramos[j] = Math.max(tramos[j], d);
+      r = calc(tramos);
+    }
+    return { tramos, resultado: r };
+  }
+
+  // Tramos de un mismo diámetro, uno detrás del otro: [{ nominal, desde (n° de aspersor), hasta, largo (m) }]
+  function tramosPorDiametro(tramos) {
+    const lista = [];
+    for (const t of tramos) {
+      const ultimo = lista.at(-1);
+      if (ultimo && ultimo.nominal === t.nominal) { ultimo.hasta = t.hasta; ultimo.largo += t.largo; }
+      else lista.push({ nominal: t.nominal, desde: t.hasta, hasta: t.hasta, largo: t.largo });
+    }
+    return lista;
   }
 
   // "2,24" o "2,24 a 2,28" según los valores de una lista de aspersores.
@@ -351,6 +392,6 @@
 
   global.RIEGO = {
     MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, MANGUERAS, ACCESORIOS_MANGUERA_M, MANGUERA_MAX_M, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
-    interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, fmt,
+    interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, escalonar, tramosPorDiametro, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

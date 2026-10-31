@@ -30,7 +30,7 @@ function obraDePrueba() {
       { tipo: 'MP Rotator', boquilla: 'MP2000', arco: 180, regulador: 'PRS40', distancia: 5, altura: 0, manguera: 2 },
       { tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 200, regulador: 'PRS30', distancia: 4, altura: 0, manguera: 1.5 },
     ] },
-    { ...A.sectorNuevo(2), nombre: 'Fondo', superficie: 160, lateral: { material: 'pead-pn6', nominal: 32 }, aspersores: [
+    { ...A.sectorNuevo(2), nombre: 'Fondo', superficie: 160, lateral: { material: 'pead-pn6', nominal: 32, escalonado: false }, aspersores: [
       { tipo: 'Turbina PGP Ultra', boquilla: '3.0', arco: 180, regulador: '', distancia: 3, altura: 0, manguera: 1 },
       { tipo: 'Turbina PGP Ultra con boquilla MPR', boquilla: 'MPR-30', arco: 90, regulador: '', distancia: 9, altura: 0, manguera: 0 },
     ] },
@@ -70,16 +70,16 @@ test('cálculo: todos los sectores calculan y el caudal es la suma de sus aspers
 
 test('plano: las distancias del plano llegan al cálculo y al presupuesto', () => {
   const { o, datos } = obraDePrueba();
-  o.plano = { ancho: 20, largo: 12, fuente: { x: 0, y: 0 }, distanciasDesdePlano: true, verCobertura: true };
-  o.sectores[0].valvulaPos = { x: 0, y: 3 };
+  // Bomba en (-0,5; 3): las válvulas quedan a su salida, una cada 0,5 m (colector), en (0; 3) y (0,5; 3)
+  o.plano = { ancho: 20, largo: 12, fuente: { x: -0.5, y: 3 }, distanciasDesdePlano: true, verCobertura: true };
   [[3, 4], [3, 10], [9, 10]].forEach(([x, y], i) => Object.assign(o.sectores[0].aspersores[i], { x, y, giro: 90 }));
-  o.sectores[1].valvulaPos = { x: 1, y: 0 };
   [[4, 4], [10, 4]].forEach(([x, y], i) => Object.assign(o.sectores[1].aspersores[i], { x, y, giro: 0 }));
   O.sincronizarDistancias(o);
-  // Frente: válvula (0;3) → (3;4) = √10 ≈ 3,2 m; → (3;10) = 6 m; → (9;10) = 6 m. Fondo: (1;0) → (4;4) = 5 m; → (10;4) = 6 m.
+  assert.deepEqual([o.sectores[0].valvulaPos, o.sectores[1].valvulaPos], [{ x: 0, y: 3 }, { x: 0.5, y: 3 }]);
+  // Frente: válvula (0;3) → (3;4) = √10 ≈ 3,2 m; → (3;10) = 6 m; → (9;10) = 6 m. Fondo: (0,5;3) → (4;4) ≈ 3,6 m; → (10;4) = 6 m.
   assert.deepEqual(o.sectores[0].aspersores.map(a => a.distancia), [3.2, 6, 6]);
-  assert.deepEqual(o.sectores[1].aspersores.map(a => a.distancia), [5, 6]);
-  assert.equal(o.sectores[0].alimentacion.largo, 3);
+  assert.deepEqual(o.sectores[1].aspersores.map(a => a.distancia), [3.6, 6]);
+  assert.equal(o.sectores[0].alimentacion.largo, 0.5);
   assert.equal(o.sectores[1].alimentacion.largo, 1);
   // El cálculo usa esos tramos
   const c = O.calcular(o, o.sectores[0]);
@@ -88,8 +88,8 @@ test('plano: las distancias del plano llegan al cálculo y al presupuesto', () =
   const m = P.materialesDeObra(o, O.paraCalcular(o));
   const q = clave => m.renglones.find(r => r.clave === clave).cantidad;
   assert.equal(q('cano-pvc-k6-32'), Math.ceil(15.2 * 1.1));     // ramal del Frente (PVC K6 32)
-  assert.equal(q('cano-pead-pn6-32'), Math.ceil(11 * 1.1));     // ramal del Fondo (PEAD 32)
-  assert.equal(q('cano-pvc-k6-40'), Math.ceil(3 * 1.1));        // alimentación compartida: la más larga (3 m)
+  assert.equal(q('cano-pead-pn6-32'), Math.ceil(9.6 * 1.1));    // ramal del Fondo (PEAD 32)
+  assert.equal(q('cano-pvc-k6-40'), Math.ceil(1 * 1.1));        // colector a la salida de la bomba: 1 m para 2 válvulas
   // El plano dibuja cada aspersor con el mismo alcance que dio el cálculo
   const dibujo = O.aspersoresDelPlano(o);
   assert.equal(dibujo.length, 5);
@@ -260,8 +260,9 @@ test('ramal dibujado: orden por el caño, tramos, mangueras hasta el caño, codo
   const asp = (x, y) => ({ tipo: 'Boquilla Pro ajustable', boquilla: '12A-HE', arco: 180, regulador: 'PRS30', distancia: 1, altura: 0, manguera: 1, x, y, giro: 0 });
   const a9 = asp(9, 6), a3 = asp(3, 1), a6 = asp(6, -2), a2 = asp(2.2, 0.1);
   // Caño en L: de la válvula (0,0) hasta (10,0) y de ahí hasta (10,10): un codo
-  o.sectores = [{ ...A.sectorNuevo(1), valvulaPos: { x: 0, y: 0 }, ramal: [{ x: 10, y: 0 }, { x: 10, y: 10 }], aspersores: [a9, a3, a6, a2] }];
+  o.sectores = [{ ...A.sectorNuevo(1), ramal: [{ x: 10, y: 0 }, { x: 10, y: 10 }], aspersores: [a9, a3, a6, a2] }];
   o.plano.distanciasDesdePlano = false;
+  o.plano.fuente = { x: -0.5, y: 0 };   // la válvula queda a la salida de la bomba, en (0; 0)
   O.sincronizarDistancias(o);
   const s = o.sectores[0];
   assert.deepEqual(s.aspersores, [a2, a3, a6, a9], 'en el orden en que los pasa el caño');
@@ -302,4 +303,45 @@ test('zonas: la mano de obra usa los m² dibujados; los aspersores sin ubicar no
   assert.equal(s.aspersores.at(-1).x, undefined, 'el sin ubicar queda último');
   assert.ok(O.aspersoresDelPlano(o).filter(a => a.s === 0).every(a => a.x != null));
   assert.equal(O.aspersoresDelPlano(o).filter(a => a.s === 0).length, s.aspersores.length - 1);
+});
+
+test('caño escalonado y colector: diámetros que bajan, reducciones, codo del diámetro que corresponde, T y codo a la salida de la bomba', () => {
+  const { o } = obraDePrueba();
+  o.fuente = { tipo: 'presion', bar: 4 };
+  o.plano.fuente = { x: -0.5, y: 0 };
+  o.plano.distanciasDesdePlano = false;
+  // Tirón en L de 54 m: 50 m derecho y 4 de vuelta; 12 turbinas PGP 3.0 cada 4 m, a 1 m del caño
+  const pgp = x => ({ tipo: 'Turbina PGP Ultra', boquilla: '3.0', arco: 180, regulador: '', distancia: 4, altura: 0, manguera: 1, x, y: 1, giro: 0 });
+  const largo = { ...A.sectorNuevo(1), ramal: [{ x: 50, y: 0 }, { x: 50, y: 4 }], aspersores: Array.from({ length: 12 }, (_, i) => pgp(6 + i * 4)) };
+  o.sectores = [largo];
+  O.sincronizarDistancias(o);
+  const c = O.calcular(o, largo);
+  const diam = c.r.tramos.map(t => t.nominal);
+  assert.ok(diam.every((d, i) => !i || d <= diam[i - 1]), `nunca crece hacia el final: ${diam}`);
+  assert.ok(new Set(diam).size >= 2, `se escalona: ${diam}`);
+  assert.ok(c.r.tramos.every(t => t.velocidad <= R.VELOCIDAD_MAX + 1e-9));
+  assert.ok(c.r.variacion <= R.VARIACION_MAX);
+  const grupos = R.tramosPorDiametro(c.r.tramos);
+  const pre = O.presupuesto(o, {});
+  const q = clave => pre.renglones.find(r => r.clave === clave)?.cantidad ?? 0;
+  // Una reducción en cada cambio de diámetro; el codo de la vuelta (a los 50 m) y el tapón, del último diámetro
+  for (let k = 1; k < grupos.length; k++) assert.equal(q(`reduccion-pvc-k6-${grupos[k - 1].nominal}-${grupos[k].nominal}`), 1);
+  assert.equal(q(`codo-pvc-k6-${diam.at(-1)}`), 1);
+  assert.equal(q(`tapon-pvc-k6-${diam.at(-1)}`), 1);
+  // Metros de caño: todo el ramal dibujado (54 m), repartido por diámetro (+10 %)
+  // El último aspersor (50; 1) se engancha en la vuelta, a 51 m por el caño; después siguen 3 m hasta el tapón
+  assert.equal(grupos.reduce((t, g) => t + g.largo, 0), 51);
+  const ultimo = grupos.at(-1).nominal;
+  const metrosUltimo = grupos.filter(g => g.nominal === ultimo).reduce((t, g) => t + g.largo, 0) + 3;
+  assert.equal(q(`cano-pvc-k6-${ultimo}`), Math.ceil(metrosUltimo * 1.1));
+  // Con un solo sector no hay colector; con tres, 2 T y 1 codo del caño de la salida de la bomba
+  assert.equal(q('te-pvc-k6-40'), 0);
+  o.sectores.push({ ...A.sectorNuevo(2), aspersores: [pgp(10)] }, { ...A.sectorNuevo(3), aspersores: [pgp(20)] });
+  O.sincronizarDistancias(o);
+  const pre3 = O.presupuesto(o, {});
+  const q3 = clave => pre3.renglones.find(r => r.clave === clave)?.cantidad ?? 0;
+  assert.equal(q3('te-pvc-k6-40'), 2);
+  assert.equal(q3('codo-pvc-k6-40'), 1);
+  assert.equal(q3('valvula-pgv-1'), 3);
+  assert.deepEqual(o.sectores.map(s => s.valvulaPos), [{ x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }], 'las válvulas, juntas a la salida de la bomba');
 });

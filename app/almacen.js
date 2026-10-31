@@ -15,9 +15,9 @@
   const sectorNuevo = n => ({
     nombre: `Sector ${n}`,
     superficie: 0,
-    alimentacion: { material: 'pvc-k6', nominal: 40, largo: 10, desnivel: 0 },
+    alimentacion: { material: 'pvc-k6', nominal: 40, largo: 0.5, desnivel: 0 },   // colector a la salida de la bomba
     valvula: true,
-    lateral: { material: 'pvc-k6', nominal: 32 },
+    lateral: { material: 'pvc-k6', nominal: 32, escalonado: true },   // automático: el diámetro de cada tramo lo calcula la app
     manguera: 'pe-12',
     aspersores: [],   // sin fila de ejemplo (Darío): se agregan en el plano con "+ Aspersor" o en Diseño
   });
@@ -79,6 +79,7 @@
         s.superficie ??= 0;
         // Obras de antes de la manguera: se agrega el tipo, pero cada aspersor queda con 0 m (como estaba calculado).
         s.manguera ??= 'pe-12';
+        s.lateral.escalonado ??= false;   // obras de antes: el diámetro que tenían
         for (const a of s.aspersores) a.manguera ??= 0;
       }
     }

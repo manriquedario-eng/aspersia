@@ -46,14 +46,34 @@
   }
 
   // Lo que necesita RIEGO.calcularSector para un sector de la obra.
-  const paraCalcular = obra => s => ({
-    fuente: obra.fuente.tipo === 'bomba'
-      ? { tipo: 'bomba', linea: obra.fuente.linea, modelo: obra.fuente.modelo, aspiracion: obra.fuente.aspiracion }
-      : { tipo: 'presion', bar: obra.fuente.bar },
-    alimentacion: s.alimentacion, valvula: s.valvula, lateral: s.lateral, manguera: s.manguera || null,
-    aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura, manguera: a.manguera || 0 })),
-    accesorios: obra.accesorios,
-  });
+  // Con el caño "automático" (escalonado), cada tramo lleva el diámetro que calcula RIEGO.escalonar.
+  const escalonados = new Map();   // datos del sector → diámetros por tramo (se recalcula solo si algo cambió)
+  function tramosEscalonados(datos) {
+    const clave = JSON.stringify(datos);
+    if (!escalonados.has(clave)) {
+      let tramos = null;
+      try { tramos = R().escalonar(datos).tramos; } catch { /* sector con error: se calcula sin escalonar y muestra el error */ }
+      if (escalonados.size > 300) escalonados.clear();
+      escalonados.set(clave, tramos);
+    }
+    return escalonados.get(clave);
+  }
+  const paraCalcular = obra => s => {
+    const { escalonado, tramos, ...lateral } = s.lateral;
+    const d = {
+      fuente: obra.fuente.tipo === 'bomba'
+        ? { tipo: 'bomba', linea: obra.fuente.linea, modelo: obra.fuente.modelo, aspiracion: obra.fuente.aspiracion }
+        : { tipo: 'presion', bar: obra.fuente.bar },
+      alimentacion: s.alimentacion, valvula: s.valvula, lateral, manguera: s.manguera || null,
+      aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura, manguera: a.manguera || 0 })),
+      accesorios: obra.accesorios,
+    };
+    if (escalonado && d.aspersores.length) {
+      const t = tramosEscalonados(d);
+      if (t) d.lateral = { ...lateral, tramos: t };
+    }
+    return d;
+  };
 
   function calcular(obra, s) {
     try {
@@ -84,16 +104,29 @@
   // Con "calcular los caños con las distancias del plano", las distancias entre aspersores y el largo hasta
   // cada válvula salen de las posiciones. Un sector con ramal dibujado sale siempre del plano (orden, tramos y mangueras).
   // Se llama antes de cualquier cálculo, así todo usa los mismos metros.
+  // Las válvulas van juntas a la salida de la bomba (Darío: el 99 % de las veces), en un colector: un caño corto
+  // con una T por cada sector menos el último, que lleva un codo. Cada válvula queda a 0,5 m de la anterior y
+  // el caño hasta ella (la "alimentación" del cálculo) es ese tramo de colector.
+  const SEPARACION_VALVULAS = 0.5;
+  function ubicarValvulas(obra) {
+    const f = obra.plano?.fuente;
+    if (!f) return;
+    const hacia = f.x <= obra.plano.ancho / 2 ? 1 : -1;   // hacia adentro del terreno
+    obra.sectores.forEach((s, k) => {
+      const d = SEPARACION_VALVULAS * (k + 1);
+      s.valvulaPos = { x: r1(f.x + hacia * d), y: f.y };
+      if (s.alimentacion) s.alimentacion.largo = d;
+    });
+  }
+
   function sincronizarDistancias(obra) {
     if (!obra.plano) return;
+    ubicarValvulas(obra);
     const desdePlano = obra.plano.distanciasDesdePlano;
     if (!desdePlano && !obra.sectores.some(tieneRamal)) return;
-    global.GEOMETRIA.ubicarSinPosicion(obra.plano, obra.sectores);
-    const f = obra.plano.fuente;
     for (const s of obra.sectores) {
       if (tieneRamal(s)) aplicarRamal(s);
       else if (desdePlano) global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => { if (d != null) s.aspersores[i].distancia = d; });
-      if (desdePlano) s.alimentacion.largo = r1(Math.hypot(s.valvulaPos.x - f.x, s.valvulaPos.y - f.y));
     }
   }
 
@@ -134,8 +167,11 @@
     return lista;
   }
 
+  // Diámetro del caño en el tramo que llega a cada aspersor (escalonado o el mismo para todos), para el plano.
+  const diametrosDelSector = (obra, s) => { const lat = paraCalcular(obra)(s).lateral; return s.aspersores.map((a, i) => lat.tramos?.[i] ?? lat.nominal); };
+
   // Superficie de las zonas a regar dibujadas en el plano (m²), o null si no hay ninguna.
   const superficieZonas = obra => obra.plano?.zonas?.length ? obra.plano.zonas.reduce((t, z) => t + global.GEOMETRIA.areaPoligono(z), 0) : null;
 
-  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, superficieZonas, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

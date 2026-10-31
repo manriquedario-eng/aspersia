@@ -271,15 +271,15 @@
     </section>
 
     <section class="tarjeta">
-      <h2>Caño hasta la válvula</h2>
-      <p class="ayuda arriba">Desde la bomba o la llave hasta la válvula de este sector.</p>
+      <h2>Salida de la bomba (colector)</h2>
+      <p class="ayuda arriba">Las válvulas van juntas a la salida de la bomba: un caño corto con una T por cada sector y un codo al final. Acá elegís ese caño.</p>
       <div class="campos dos">
         <label>Caño <select id="alim-material"></select></label>
         <label>Diámetro <select id="alim-nominal"></select></label>
         <label>Largo <span class="unidad">m</span><input id="alim-largo" type="number" inputmode="decimal" step="1" min="0"></label>
         <label>Desnivel <span class="unidad">m</span><input id="alim-desnivel" type="number" inputmode="decimal" step="0.5"></label>
       </div>
-      <p class="ayuda">Desnivel: positivo si la válvula está más alta que la fuente.</p>
+      <p class="ayuda">El largo sale solo: medio metro de colector por válvula. Desnivel: positivo si la válvula está más alta que la bomba.</p>
       <label class="tilde"><input id="valvula" type="checkbox"> Electroválvula Hunter PGV de 1"</label>
     </section>
 
@@ -289,7 +289,7 @@
         <label>Caño del sector <select id="lat-material"></select></label>
         <label>Diámetro <select id="lat-nominal"></select></label>
       </div>
-      <p class="ayuda">El caño termina con tapón. Cada aspersor sale con conector inicial, manguera de polietileno K4 de ½" o 16 mm y espiga en L. "Distancia" es por el caño; "Manguera" es lo que va del caño al aspersor (0 si va directo al caño).</p>
+      <p class="ayuda">"Automático": en tirones largos sale grueso de la bomba y se va achicando (por ejemplo 63 → 50 → 40 mm), con la reducción en cada cambio; en tirones cortos queda de un solo diámetro. El caño termina con tapón. Cada aspersor sale con conector inicial, manguera de polietileno K4 de ½" o 16 mm y espiga en L. "Distancia" es por el caño; "Manguera" es lo que va del caño al aspersor (0 si va directo al caño).</p>
       <ol id="aspersores" class="aspersores"></ol>
       <button id="agregar" class="boton" type="button">+ Agregar aspersor</button>
     </section>

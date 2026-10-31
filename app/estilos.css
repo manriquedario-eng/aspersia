@@ -384,3 +384,10 @@ ol.pasos li { margin: 4px 0; }
 .plano-flotante .chico.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
 .plano-flotante input { width: 80px; min-height: 38px; }
 .plano .marca-calibrar.cerrar { stroke: var(--hoja); }
+/* Bomba, diámetros del caño y agarraderas del abanico */
+.plano .texto-fuente, .plano .texto-diametro { fill: #fff; stroke: rgba(0, 0, 0, .65); paint-order: stroke; text-anchor: middle; font-weight: 700; pointer-events: none; }
+.plano .asa { fill: #fff; stroke: var(--agua); }
+.plano .asa-girar { fill: var(--agua); stroke: #fff; }
+.fila-sector { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--linea); }
+.fila-sector i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.fila-sector .chico { margin: 0 0 0 6px; }

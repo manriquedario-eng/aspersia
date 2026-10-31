@@ -107,6 +107,22 @@
     return mejor;
   }
 
+  // Pedazo de una línea entre dos recorridos (metros desde su inicio), para dibujar cada tramo con su diámetro.
+  function subLinea(linea, desde, hasta) {
+    const puntos = [];
+    let recorrido = 0;
+    for (let i = 0; i < linea.length - 1; i++) {
+      const a = linea[i], b = linea[i + 1], L = Math.hypot(b.x - a.x, b.y - a.y);
+      const en = r => ({ x: a.x + (b.x - a.x) * (r - recorrido) / (L || 1), y: a.y + (b.y - a.y) * (r - recorrido) / (L || 1) });
+      if (recorrido + L >= desde && recorrido <= hasta) {
+        if (!puntos.length) puntos.push(en(Math.max(desde, recorrido)));
+        if (recorrido + L <= hasta) puntos.push(b); else { puntos.push(en(hasta)); break; }
+      }
+      recorrido += L;
+    }
+    return puntos;
+  }
+
   // Conexión de cada aspersor al ramal, en el orden en que los va pasando el caño desde la válvula:
   // [{ i (índice del aspersor), punto, manguera (m), tramo (m de caño desde la conexión anterior o la válvula) }].
   function conexionesAlRamal(valvula, ramal, aspersores) {
@@ -153,5 +169,5 @@
   }
 
   global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
-    largoDeLinea, puntoMasCercano, conexionesAlRamal, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
+    largoDeLinea, puntoMasCercano, conexionesAlRamal, subLinea, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
 })(typeof window !== 'undefined' ? window : globalThis);

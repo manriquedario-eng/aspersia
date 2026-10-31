@@ -75,7 +75,7 @@
     const desperdicio = 1 + (obra.presupuesto?.desperdicio ?? 10) / 100;
     const canos = new Map();      // material-nominal → { lateral, alimentacion }
     const mangueras = new Map();  // tipo de manguera → { mang, metros }
-    let valvulas = 0, aspersores = 0, m2 = 0, m2Estimados = false, usaPVC = false;
+    let valvulas = 0, aspersores = 0, m2 = 0, m2Estimados = false, usaPVC = false, salidas = 0, colector = null;
     const notas = [];
 
     obra.sectores.forEach((s, i) => {
@@ -97,22 +97,41 @@
           mangueras.set(s.manguera, m);
         } else sumar('conexion-aspersor', 'Materiales', 'Conexión directa al caño (te o buje y niple)', 'u', 1);
       });
-      // El ramal del sector termina con un tapón.
-      const tipoLat = R.CANOS[s.lateral.material];
-      sumar(`tapon-${s.lateral.material}-${s.lateral.nominal}`, 'Materiales',
-        /^pvc/.test(s.lateral.material) ? `Tapón de PVC de ${s.lateral.nominal} mm` : `Tapón final de caño ${tipoLat.nombre} de ${s.lateral.nominal} mm`, 'u', 1);
-      if (/^pvc/.test(s.lateral.material) || /^pvc/.test(s.alimentacion?.material || '')) usaPVC = true;
-      if (s.valvula) valvulas++;
-      const lat = `${s.lateral.material}-${s.lateral.nominal}`;
-      const c = canos.get(lat) || { material: s.lateral.material, nominal: s.lateral.nominal, lateral: 0, alimentacion: 0 };
-      // Con el ramal dibujado en el plano, el caño es el largo dibujado y lleva un codo en cada quiebre.
+      // Caño del sector: cada tramo con su diámetro (escalonado o uno solo). Con el ramal dibujado en el plano
+      // el caño es el largo dibujado (lo que sigue después del último aspersor va con el último diámetro) y lleva
+      // un codo en cada quiebre, del diámetro del tramo donde cae. Termina con un tapón; en cada cambio, una reducción.
+      const mat = s.lateral.material, tipoLat = R.CANOS[mat], esPVC = /^pvc/.test(mat);
+      const pieza = (clave, nombre, nominal, cantidad) => sumar(`${clave}-${mat}-${nominal}`, 'Materiales',
+        esPVC ? `${nombre} de PVC de ${nominal} mm` : `${nombre} para caño ${tipoLat.nombre} de ${nominal} mm`, 'u', cantidad);
+      const tramos = r.tramos.map(t => ({ nominal: t.nominal ?? s.lateral.nominal, largo: t.largo }));
       const ramal = s.ramal && s.ramal.length && s.valvulaPos ? [s.valvulaPos, ...s.ramal] : null;
-      c.lateral += ramal ? ramal.slice(1).reduce((t, p, k) => t + Math.hypot(p.x - ramal[k].x, p.y - ramal[k].y), 0)
-        : s.aspersores.reduce((t, a) => t + (a.distancia || 0), 0);
-      canos.set(lat, c);
-      if (ramal && ramal.length > 2)
-        sumar(`codo-${s.lateral.material}-${s.lateral.nominal}`, 'Materiales',
-          /^pvc/.test(s.lateral.material) ? `Codo de PVC de ${s.lateral.nominal} mm` : `Codo para caño ${tipoLat.nombre} de ${s.lateral.nominal} mm`, 'u', ramal.length - 2);
+      if (ramal) {
+        const largoRamal = ramal.slice(1).reduce((t, p, k) => t + Math.hypot(p.x - ramal[k].x, p.y - ramal[k].y), 0);
+        const hastaUltimo = tramos.reduce((t, x) => t + x.largo, 0);
+        if (largoRamal > hastaUltimo) tramos.push({ nominal: tramos.at(-1).nominal, largo: largoRamal - hastaUltimo });
+        // Codos: en cada quiebre, del diámetro del tramo que pasa por ahí
+        let recorrido = 0;
+        for (let k = 1; k < ramal.length - 1; k++) {
+          recorrido += Math.hypot(ramal[k].x - ramal[k - 1].x, ramal[k].y - ramal[k - 1].y);
+          let acum = 0, nominal = tramos.at(-1).nominal;
+          for (const t of tramos) { acum += t.largo; if (recorrido <= acum + 1e-9) { nominal = t.nominal; break; } }
+          pieza('codo', 'Codo', nominal, 1);
+        }
+      }
+      for (const t of tramos) {
+        const clave = `${mat}-${t.nominal}`;
+        const c = canos.get(clave) || { material: mat, nominal: t.nominal, lateral: 0, alimentacion: 0 };
+        c.lateral += t.largo;
+        canos.set(clave, c);
+      }
+      for (let k = 1; k < tramos.length; k++) if (tramos[k].nominal !== tramos[k - 1].nominal)
+        sumar(`reduccion-${mat}-${tramos[k - 1].nominal}-${tramos[k].nominal}`, 'Materiales',
+          `Reducción ${esPVC ? 'de PVC ' : ''}de ${tramos[k - 1].nominal} a ${tramos[k].nominal} mm`, 'u', 1);
+      pieza('tapon', 'Tapón', tramos.at(-1).nominal, 1);
+      if (esPVC || /^pvc/.test(s.alimentacion?.material || '')) usaPVC = true;
+      if (s.valvula) valvulas++;
+      salidas++;
+      colector ||= s.alimentacion;
       if (s.alimentacion && s.alimentacion.largo > 0) {
         const al = `${s.alimentacion.material}-${s.alimentacion.nominal}`;
         const ca = canos.get(al) || { material: s.alimentacion.material, nominal: s.alimentacion.nominal, lateral: 0, alimentacion: 0 };
@@ -127,6 +146,13 @@
     for (const [tipo, m] of mangueras)
       sumar(`manguera-${tipo}`, 'Materiales', `Manguera de ${m.mang.nombre.charAt(0).toLowerCase()}${m.mang.nombre.slice(1)}`, 'm', Math.ceil(m.metros * desperdicio));
     if (usaPVC) sumar('pegamento-pvc', 'Materiales', 'Adhesivo para caños de PVC', 'u', 1);
+    // Colector a la salida de la bomba (como lo arma Darío): un caño corto con una T por cada sector menos uno
+    // y un codo al final. Con un solo sector, la válvula va directo.
+    if (salidas > 1 && colector) {
+      const cm = colector.material, pvc = /^pvc/.test(cm), nombre = R.CANOS[cm].nombre;
+      sumar(`te-${cm}-${colector.nominal}`, 'Materiales', pvc ? `T de PVC de ${colector.nominal} mm` : `T para caño ${nombre} de ${colector.nominal} mm`, 'u', salidas - 1);
+      sumar(`codo-${cm}-${colector.nominal}`, 'Materiales', pvc ? `Codo de PVC de ${colector.nominal} mm` : `Codo para caño ${nombre} de ${colector.nominal} mm`, 'u', 1);
+    }
     if (valvulas) {
       sumar('valvula-pgv-1', 'Materiales', 'Electroválvula Hunter PGV-101 de 1"', 'u', valvulas);
       sumar('caja-valvulas', 'Materiales', 'Caja para válvulas con tapa', 'u', 1);
