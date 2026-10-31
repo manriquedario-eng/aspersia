@@ -116,7 +116,7 @@
         if (!(i >= 0 && i < obra.sectores.length)) return ir(`#/obra/${obra.id}/diseno`);
         return abrirSector(i);
       }
-      return abrirObra(['cliente', 'diseno', 'plano', 'presupuesto', 'cobros'].includes(sub) ? sub : mant ? 'presupuesto' : 'diseno');
+      return abrirObra(['cliente', 'plano', 'diseno', 'presupuesto', 'cobros'].includes(sub) ? sub : mant ? 'presupuesto' : 'plano');   // primero el plano, después el diseño
     }
     obra = null;
     if (seccion === 'precios') { mostrar('precios'); subtitulo('Lista de precios'); return pintarPrecios(); }
@@ -140,7 +140,7 @@
       const mant = o.tipo === 'mantenimiento';
       const caja = O.cajaDeObra(o, datos.precios);
       const cobrado = caja.cobrado ? ` · cobrado ${P.pesos(caja.cobrado)}` : '';
-      return `<li><a class="sector-tarjeta" href="#/obra/${o.id}/${mant ? 'presupuesto' : 'diseno'}">
+      return `<li><a class="sector-tarjeta" href="#/obra/${o.id}/${mant ? 'presupuesto' : 'plano'}">
         <span class="sector-nombre">${escapar(nombreObra(o))}</span>
         <span class="sector-datos">${escapar(lugar || 'Sin datos del cliente')}</span>
         <span class="sector-datos">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${mant ? 'Mantenimiento' : `${o.sectores.length} sector${o.sectores.length === 1 ? '' : 'es'}`}${total}${cobrado}</span>
