@@ -104,11 +104,15 @@
     // --- Detalle por rubro (solo renglones con cantidad y precio) ---
     const cuerpo = [];
     for (const rubro of P.RUBROS) {
-      const rs = pre.renglones.filter(r => r.rubro === rubro && r.cantidad && r.precio);
+      // En mantenimiento, un material sin precio sale igual con "A confirmar según relevamiento" (Darío)
+      const aConfirmar = r => pre.datos?.tipo === 'mantenimiento' && r.rubro === 'Materiales' && !r.precio && r.descripcion;
+      const rs = pre.renglones.filter(r => r.rubro === rubro && r.cantidad && (r.precio || aConfirmar(r)));
       if (!rs.length) continue;
       cuerpo.push([{ content: rubro, colSpan: 4, styles: { fontStyle: 'bold', textColor: AZUL, fillColor: [242, 246, 250] } },
         { content: P.pesos(pre.subtotales[rubro]), styles: { fontStyle: 'bold', textColor: AZUL, fillColor: [242, 246, 250], halign: 'right' } }]);
-      for (const r of rs) cuerpo.push([r.descripcion, cantidad(r.cantidad), r.unidad, P.pesos(r.precio), P.pesos(r.importe)]);
+      for (const r of rs) cuerpo.push(aConfirmar(r)
+        ? [r.descripcion, cantidad(r.cantidad), r.unidad, { content: 'A confirmar según relevamiento', colSpan: 2, styles: { halign: 'right', fontStyle: 'italic' } }]
+        : [r.descripcion, cantidad(r.cantidad), r.unidad, P.pesos(r.precio), P.pesos(r.importe)]);
     }
     doc.autoTable({
       startY: y, margin: { left: margen, right: margen, bottom: 22 },
@@ -141,7 +145,9 @@
     const finTotales = doc.lastAutoTable.finalY;
 
     // --- Condiciones ---
-    const condiciones = [['Forma de pago', p.formaPago], ['Datos para el pago', (inst.pago || '').trim()], ['Notas', p.notas], ['Validez', `${p.validez} días desde la fecha del presupuesto.`]].filter(([, v]) => v);
+    // Día y hora para hacer la obra (Darío): "sábado 8/11/2026, 9:00 h"
+    const diaObra = p.diaObra ? new Date(p.diaObra + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' }) + (p.horaObra ? `, ${p.horaObra} h` : '') : '';
+    const condiciones = [['Fecha de la obra', diaObra], ['Forma de pago', p.formaPago], ['Datos para el pago', (inst.pago || '').trim()], ['Notas', p.notas], ['Validez', `${p.validez} días desde la fecha del presupuesto.`]].filter(([, v]) => v);
     doc.autoTable({
       startY: yBloque, margin: { left: margen, right: margen + 80 + 6, bottom: 22 }, theme: 'plain', body: condiciones,
       styles: { fontSize: 8.5, cellPadding: { top: 1, bottom: 1, left: 0, right: 3 }, textColor: [19, 35, 58] },

@@ -835,7 +835,7 @@
     $('presupuesto-cerrado').hidden = !fijo;
     if (fijo) $('presupuesto-cerrado').innerHTML = `<b>Presupuesto cerrado</b> el ${escapar(p.congelado.fechaCierre || '')} (${escapar(obra.estado)}).
       Los cambios del diseño y de la lista de precios ya no lo modifican. <button id="reabrir" class="chico" type="button">Reabrir para editar</button>`;
-    for (const [id, v] of [['pre-fecha', p.fecha], ['pre-validez', p.validez], ['pre-descuento', p.descuento], ['pre-desperdicio', p.desperdicio], ['pre-pago', p.formaPago], ['pre-notas', p.notas]]) {
+    for (const [id, v] of [['pre-fecha', p.fecha], ['pre-validez', p.validez], ['pre-dia-obra', p.diaObra], ['pre-hora-obra', p.horaObra], ['pre-descuento', p.descuento], ['pre-desperdicio', p.desperdicio], ['pre-pago', p.formaPago], ['pre-notas', p.notas]]) {
       $(id).value = v ?? '';
       $(id).disabled = fijo;
     }
@@ -901,7 +901,7 @@
     if (pre.iva) filas.push(`<tr><td>IVA ${P.IVA} %</td><td>${P.pesos(pre.iva)}</td></tr>`);
     const ganancia = pre.costoMateriales > 0 ? `<p class="ayuda">Para vos (no sale en el PDF): los materiales te cuestan ${P.pesos(pre.costoMateriales)}; ganancia estimada ${P.pesos(pre.utilidad)}${pre.neto ? ` (${fmt(pre.utilidad / pre.neto * 100, 0)} % de lo que cobrás sin IVA)` : ''}${pre.sinCosto ? `. Ojo: ${pre.sinCosto} material${pre.sinCosto === 1 ? '' : 'es'} sin costo cargado` : ''}.</p>` : '';
     $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${P.pesos(pre.total)}</td></tr></table>${ganancia}
-      ${pre.sinPrecio ? `<ul class="avisos"><li class="aviso">${pre.sinPrecio} renglón${pre.sinPrecio === 1 ? '' : 'es'} sin precio: no sale${pre.sinPrecio === 1 ? '' : 'n'} en el PDF hasta que le pongas uno.</li></ul>` : ''}`;
+      ${pre.sinPrecio ? `<ul class="avisos"><li class="aviso">${pre.sinPrecio} renglón${pre.sinPrecio === 1 ? '' : 'es'} sin precio: ${obra.tipo === 'mantenimiento' ? 'los materiales salen en el PDF como "A confirmar según relevamiento"; las horas sin precio no salen' : `no sale${pre.sinPrecio === 1 ? '' : 'n'} en el PDF hasta que le pongas uno`}.</li></ul>` : ''}`;
   }
 
   // Cambios en los renglones: mientras escribe se recalculan importe y total sin rearmar la lista (no pierde el foco).
@@ -979,6 +979,8 @@
   const enlacesPre = {
     'pre-fecha': v => obra.presupuesto.fecha = v,
     'pre-validez': v => obra.presupuesto.validez = decimal(v),
+    'pre-dia-obra': v => obra.presupuesto.diaObra = v,
+    'pre-hora-obra': v => obra.presupuesto.horaObra = v,
     'pre-descuento': v => obra.presupuesto.descuento = Math.min(100, decimal(v)),
     'pre-desperdicio': v => obra.presupuesto.desperdicio = decimal(v),
     'pre-pago': v => obra.presupuesto.formaPago = v,
