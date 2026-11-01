@@ -8,6 +8,8 @@
   const NS = 'http://www.w3.org/2000/svg';
   const COLORES = ['#0a9ae9', '#8b5cf6', '#f97316', '#14b8a6', '#e11d48', '#ca8a04', '#2563eb', '#58a003'];
   const colorSector = k => COLORES[k % COLORES.length];
+  // El aspersor elegido (el que se mueve, se gira o se le abre el arco) va en fucsia: no se confunde con los celestes
+  const ELEGIDO = '#EC008C';
   const r1 = v => Math.round(v * 10) / 10;
 
   let ctx = null;        // { obra, aspersores(), alCambiar(), contenedor, ... }
@@ -128,9 +130,16 @@
     }
     // Abanicos
     const abanicos = el('g', {}, svg);
+    const esElegido = a => seleccion?.tipo === 'asp' && seleccion.s === a.s && seleccion.i === a.i;
     for (const a of asps) {
       const [tag, attrs] = forma(a);
+      if (esElegido(a)) continue;   // el elegido se dibuja al final, encima de los demás
       el(tag, { ...attrs, fill: colorSector(a.s), 'fill-opacity': t.verCobertura ? 0.08 : 0.18, stroke: colorSector(a.s), 'stroke-width': 1.2 * escala, 'stroke-opacity': 0.8 }, abanicos);
+    }
+    const abanicoElegido = asps.find(esElegido);
+    if (abanicoElegido) {
+      const [tag, attrs] = forma(abanicoElegido);
+      el(tag, { ...attrs, fill: ELEGIDO, 'fill-opacity': 0.28, stroke: ELEGIDO, 'stroke-width': 2.5 * escala }, abanicos);
     }
     // Caños: las válvulas van juntas a la salida de la bomba; de cada una sale el caño de su sector. Con el caño
     // dibujado, cada tramo se ve con el grosor de su diámetro (escalonado: más grueso al salir) y cada aspersor
@@ -223,7 +232,7 @@
     for (const a of asps) {
       const g = el('g', { 'data-mover': 'asp', 'data-s': a.s, 'data-i': a.i, class: `pieza ${seleccion?.tipo === 'asp' && seleccion.s === a.s && seleccion.i === a.i ? 'elegida' : ''}` }, svg);
       el('circle', { cx: a.x, cy: Y(a.y), r: rf * 2.2, class: 'tocar' }, g);
-      el('circle', { cx: a.x, cy: Y(a.y), r: rf, fill: colorSector(a.s), class: 'cabeza' }, g);
+      el('circle', { cx: a.x, cy: Y(a.y), r: esElegido(a) ? rf * 1.25 : rf, fill: esElegido(a) ? ELEGIDO : colorSector(a.s), class: 'cabeza' }, g);
       const txt = el('text', { x: a.x, y: Y(a.y) + rf * 0.4, 'font-size': rf * 1.15, class: 'numero-plano' }, g);
       txt.textContent = a.num ?? a.i + 1;
     }
@@ -236,7 +245,7 @@
       const giro = abriendo ? gesto.giro : elegido.giro;
       if (abriendo) {
         const [tag, attrs] = forma({ ...elegido, arco, giro });
-        el(tag, { ...attrs, fill: colorSector(elegido.s), 'fill-opacity': 0.25, stroke: 'var(--agua)', 'stroke-width': 2 * escala, 'stroke-dasharray': `${4 * escala} ${3 * escala}` }, svg);
+        el(tag, { ...attrs, fill: ELEGIDO, 'fill-opacity': 0.25, stroke: ELEGIDO, 'stroke-width': 2 * escala, 'stroke-dasharray': `${4 * escala} ${3 * escala}` }, svg);
       }
       const punto = rumbo => ({ x: elegido.x + elegido.radio * Math.sin(rumbo * Math.PI / 180), y: elegido.y + elegido.radio * Math.cos(rumbo * Math.PI / 180) });
       const asa = (p, tipo, clase) => {
@@ -271,7 +280,7 @@
     if (sol) html = `<p class="ayuda">El sol pasa por el norte: el lado de ${S.ladoDelPlano(t.norte || 0)} del plano recibe más sol y el de ${S.ladoDelPlano((t.norte || 0) + 180)}, menos. Es orientativo: lo que queda justo al sur de una casa, un muro o un árbol tiene más sombra.</p>`;
     if (!sol && ctx.aspersores().length >= 2) html += pintarConsulta();
     ctx.estadisticas.innerHTML = html;
-    const piezas = '▲ fuente · ■ válvula · punteado: caño · línea fina: manguera · □ codo';
+    const piezas = '▲ fuente · ■ válvula · línea gris: caño · línea fina: manguera · fucsia: el aspersor elegido · □ codo';
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol ? `<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ${piezas}`
       : t.verCobertura ? `<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ${piezas}` : piezas;
     pintarAcciones();

@@ -193,7 +193,7 @@ table.totales td:last-child { text-align: right; }
 .plano .valvula { stroke: #fff; stroke-width: .05; }
 .plano .fuente { fill: var(--primario); stroke: #fff; stroke-width: .05; }
 .plano .pieza { cursor: grab; }
-.plano .pieza.elegida .tocar { fill: rgba(10, 154, 233, .22); stroke: var(--agua); stroke-width: .06; }
+.plano .pieza.elegida .tocar { fill: rgba(236, 0, 140, .18); stroke: #EC008C; stroke-width: .06; }
 .plano-botones { position: absolute; right: 8px; top: 8px; display: grid; gap: 6px; }
 .plano-botones button {
   width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--linea);
@@ -386,8 +386,8 @@ ol.pasos li { margin: 4px 0; }
 .plano .marca-calibrar.cerrar { stroke: var(--hoja); }
 /* Bomba, diámetros del caño y agarraderas del abanico */
 .plano .texto-fuente, .plano .texto-diametro { fill: #fff; stroke: rgba(0, 0, 0, .65); paint-order: stroke; text-anchor: middle; font-weight: 700; pointer-events: none; }
-.plano .asa { fill: #fff; stroke: var(--agua); }
-.plano .asa-girar { fill: var(--agua); stroke: #fff; }
+.plano .asa { fill: #fff; stroke: #EC008C; }
+.plano .asa-girar { fill: #EC008C; stroke: #fff; }
 .fila-sector { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--linea); }
 .fila-sector i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
 .fila-sector .chico { margin: 0 0 0 6px; }
