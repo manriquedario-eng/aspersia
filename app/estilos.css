@@ -444,3 +444,6 @@ input[type=date] { -webkit-appearance: none; appearance: none; width: 100%; disp
 .acciones-sug .chico { margin: 0; }
 .plano .marca-sugerida { fill: rgba(255, 196, 0, 0.25); stroke: #E0A800; }
 .plano .marca-sugerida-centro { fill: #E0A800; }
+/* Candado del plano */
+.plano-botones button.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
+#diagrama-pdf { width: 100%; margin-top: 10px; }

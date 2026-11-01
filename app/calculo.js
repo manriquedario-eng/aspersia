@@ -217,7 +217,7 @@
     const mang = sector.manguera ? MANGUERAS[sector.manguera] : null;
     if (sector.manguera && !mang) throw new Error('Manguera desconocida: ' + sector.manguera);
     const asps = sector.aspersores.map((a, i) => ({
-      ...a, n: i + 1, e: emisor(a.emisor),
+      ...a, n: a.num ?? i + 1, e: emisor(a.emisor),
       reg: a.regulador ? REGULACION[a.regulador] : null,
       distancia: a.distancia || 0, altura: a.altura || 0,
       manguera: mang ? Math.max(0, a.manguera || 0) : 0,

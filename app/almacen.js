@@ -11,7 +11,7 @@
 
   // Como instala Darío: caño de PVC K6 (Tigre) desde la bomba a las válvulas y en el ramal de cada sector,
   // que termina con tapón; de ahí, conector inicial + manguera de polietileno (hasta 6 m) + espiga en L a cada aspersor.
-  const aspersorInicial = i => ({ tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180, regulador: 'PRS30', distancia: i ? 3.7 : 2, altura: 0, manguera: 1 });
+  const aspersorInicial = i => ({ tipo: 'Boquilla Pro fija', boquilla: '12', arco: 180, regulador: '', distancia: i ? 3.7 : 2, altura: 0, manguera: 1 });
   const sectorNuevo = n => ({
     nombre: `Sector ${n}`,
     superficie: 0,

@@ -109,9 +109,15 @@
       const mat = s.lateral.material, tipoLat = R.CANOS[mat], esPVC = /^pvc/.test(mat);
       const pieza = (clave, nombre, nominal, cantidad) => sumar(`${clave}-${mat}-${nominal}`, 'Materiales',
         esPVC ? `${nombre} de PVC de ${nominal} mm` : `${nombre} para caño ${tipoLat.nombre} de ${nominal} mm`, 'u', cantidad);
-      const tramos = r.tramos.map(t => ({ nominal: t.nominal ?? s.lateral.nominal, largo: t.largo }));
+      // Con la medida elegida por tramo en el plano, los metros salen de cada tramo dibujado
+      const porTramo = global.OBRA?.tramosDelRamal(s);
+      const tramos = porTramo ? porTramo.map(t => ({ nominal: t.nominal, largo: t.largo }))
+        : r.tramos.map(t => ({ nominal: t.nominal ?? s.lateral.nominal, largo: t.largo }));
       const ramal = s.ramal && s.ramal.length && s.valvulaPos ? [s.valvulaPos, ...s.ramal] : null;
-      if (ramal) {
+      if (ramal && porTramo) {
+        // Codo en cada quiebre: del diámetro del tramo que llega al quiebre
+        for (let k = 0; k < porTramo.length - 1; k++) pieza('codo', 'Codo', porTramo[k].nominal, 1);
+      } else if (ramal) {
         const largoRamal = ramal.slice(1).reduce((t, p, k) => t + Math.hypot(p.x - ramal[k].x, p.y - ramal[k].y), 0);
         const hastaUltimo = tramos.reduce((t, x) => t + x.largo, 0);
         if (largoRamal > hastaUltimo) tramos.push({ nominal: tramos.at(-1).nominal, largo: largoRamal - hastaUltimo });
@@ -130,9 +136,12 @@
         c.lateral += t.largo;
         canos.set(clave, c);
       }
-      for (let k = 1; k < tramos.length; k++) if (tramos[k].nominal !== tramos[k - 1].nominal)
-        sumar(`reduccion-${mat}-${tramos[k - 1].nominal}-${tramos[k].nominal}`, 'Materiales',
-          `Reducción ${esPVC ? 'de PVC ' : ''}de ${tramos[k - 1].nominal} a ${tramos[k].nominal} mm`, 'u', 1);
+      // En cada cambio de medida: una cupla del caño grueso con un buje de reducción (como lo arma Darío)
+      for (let k = 1; k < tramos.length; k++) if (tramos[k].nominal !== tramos[k - 1].nominal) {
+        const [g, f] = [tramos[k - 1].nominal, tramos[k].nominal].sort((a, b) => b - a);
+        pieza('cupla', 'Cupla', g, 1);
+        sumar(`buje-${mat}-${g}-${f}`, 'Materiales', `Buje de reducción ${esPVC ? 'de PVC ' : ''}de ${g} a ${f} mm`, 'u', 1);
+      }
       pieza('tapon', 'Tapón', tramos.at(-1).nominal, 1);
       if (esPVC || /^pvc/.test(s.alimentacion?.material || '')) usaPVC = true;
       if (s.valvula) {

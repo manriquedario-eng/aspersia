@@ -163,6 +163,7 @@
             <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
             <button type="button" data-zoom="menos" aria-label="Alejar">−</button>
             <button type="button" data-zoom="ajustar" aria-label="Ver todo el terreno">⤢</button>
+            <button type="button" data-zoom="candado" id="plano-candado" aria-label="Trabar el plano">🔓</button>
           </div>
           <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
           <div id="plano-flotante" class="plano-flotante" hidden></div>
@@ -174,6 +175,7 @@
           <button type="button" data-capa="nada">Solo el plano</button>
         </div>
         <div id="plano-estadisticas" class="estadisticas"></div>
+        <button id="diagrama-pdf" class="principal" type="button">Diagrama de instalación (PDF)</button>
         <p class="ayuda leyenda" id="plano-leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
       </section>
 

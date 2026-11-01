@@ -53,6 +53,32 @@
     return mejor;
   }
 
+  // Alinear un aspersor con el borde de la zona (Darío: el terreno no es parejo y el abanico no calzaba con la línea).
+  // Cerca de una esquina (a menos de "esquina" m): abre lo que mide la esquina y apunta al medio, hacia adentro.
+  // Si no, junto al lado más cercano: 180° con el borde del abanico sobre la línea, regando hacia adentro.
+  // Los ángulos a menos de 4° de 90, 180 o 270 se redondean (para que sigan sirviendo las boquillas fijas).
+  function alinearConBorde(zonas, p, esquina = 1) {
+    if (!zonas || !zonas.length) return null;
+    const redondo = a => { for (const r of [90, 180, 270]) if (Math.abs(a - r) <= 4) return r; return Math.round(a); };
+    const adentro = (giro, d = 0.4) => enZonas(zonas, p.x + d * Math.sin(rad(giro)), p.y + d * Math.cos(rad(giro)));
+    let cerca = null;
+    zonas.forEach(z => z.forEach((v, i) => { const d = Math.hypot(v.x - p.x, v.y - p.y); if (d <= esquina && (!cerca || d < cerca.d)) cerca = { d, z, i }; }));
+    if (cerca) {
+      const { z, i } = cerca, v = z[i], ant = z[(i - 1 + z.length) % z.length], sig = z[(i + 1) % z.length];
+      const b1 = rumbo(ant.x - v.x, ant.y - v.y), b2 = rumbo(sig.x - v.x, sig.y - v.y);
+      const dif = ((b2 - b1) % 360 + 360) % 360;
+      // De las dos aberturas posibles entre los lados, la que queda adentro de la zona
+      const op = [{ arco: dif, giro: b1 + dif / 2 }, { arco: 360 - dif, giro: b1 + dif / 2 + 180 }].map(o => ({ ...o, giro: ((o.giro % 360) + 360) % 360 }));
+      const o = op.find(x => adentro(x.giro, 0.6)) || op[0];
+      return { tipo: 'esquina', arco: redondo(o.arco), giro: Math.round(o.giro) % 360 };
+    }
+    const lado = ladoMasCercano(zonas, p);
+    const b = rumbo(lado.b.x - lado.a.x, lado.b.y - lado.a.y);
+    const giros = [(b + 90) % 360, (b + 270) % 360];
+    const giro = giros.find(g => adentro(g)) ?? giros[0];
+    return { tipo: 'lado', arco: 180, giro: Math.round(giro) % 360, distancia: lado.distancia };
+  }
+
   // Cuenta cuántos aspersores llegan a cada punto del terreno (una grilla de "paso" metros).
   // Devuelve la grilla y los porcentajes: seco (0), uno solo (1) y bien cubierto (2 o más).
   // Con zonas dibujadas, solo cuenta lo de adentro: lo de afuera queda marcado FUERA y no entra en los porcentajes.
@@ -271,6 +297,6 @@
     return { antes, sugerencias: sugerencias.slice(0, 6), faltan: faltan.slice(0, 3) };
   }
 
-  global.GEOMETRIA = { sugerirCobertura, rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
+  global.GEOMETRIA = { alinearConBorde, sugerirCobertura, rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
     largoDeLinea, puntoMasCercano, conexionesAlRamal, subLinea, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
 })(typeof window !== 'undefined' ? window : globalThis);

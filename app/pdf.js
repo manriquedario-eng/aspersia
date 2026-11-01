@@ -203,10 +203,191 @@
     return doc.output('blob');
   }
 
+  // ---------- Diagrama de instalación (Darío: con el proyecto validado, que no se le pueda errar en la obra) ----------
+  // Hoja 1: el plano dibujado a escala (zonas, bomba, válvulas, caño con su medida por tramo, codos, cuplas con buje,
+  // mangueras y cada aspersor con su número y su abanico). Después, por sector: el recorrido del caño y una tabla
+  // con cada aspersor en el orden en que lo encuentra el caño.
+  const COLORES = ['#0a9ae9', '#8b5cf6', '#f97316', '#14b8a6', '#e11d48', '#ca8a04', '#2563eb', '#58a003'];
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const m1 = v => (Math.round(v * 10) / 10).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  async function armarDiagrama(obra, inst) {
+    const { jsPDF } = global.jspdf;
+    const O = global.OBRA, G = global.GEOMETRIA, R = global.RIEGO;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ancho = 210, margen = 14, t = obra.plano;
+    O.sincronizarDistancias(obra);
+    const asps = O.aspersoresDelPlano(obra);
+    const calc = obra.sectores.map(s => O.calcular(obra, s));
+    const c = obra.cliente || {};
+
+    // --- Encabezado ---
+    doc.setTextColor(...AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('Diagrama de instalación', margen, 16);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRIS);
+    doc.text([`Obra N° ${numeroTexto(obra.presupuesto.numero)}${c.nombre ? ' · ' + c.nombre : ''}`, [c.direccion, c.localidad].filter(Boolean).join(', ')].filter(Boolean), ancho - margen, 12, { align: 'right' });
+    doc.text(`Terreno de ${m1(t.ancho)} × ${m1(t.largo)} m. Medidas en metros. Arriba del plano = arriba de la captura${t.norte ? ` (el norte está a ${Math.round(t.norte)}°)` : ''}.`, margen, 22);
+
+    // --- Plano a escala ---
+    const cajaW = ancho - 2 * margen, cajaH = 175, y0 = 27;
+    const k = Math.min(cajaW / t.ancho, cajaH / t.largo);
+    const ox = margen + (cajaW - t.ancho * k) / 2, oy = y0;
+    const X = x => ox + x * k, Y = y => oy + (t.largo - y) * k;
+    doc.setDrawColor(...LINEA); doc.setLineWidth(0.2); doc.rect(X(0), Y(t.largo), t.ancho * k, t.largo * k);
+    const poligono = (pts, estilo) => { if (pts.length < 2) return; doc.lines(pts.slice(1).map((p, i) => [X(p.x) - X(pts[i].x), Y(p.y) - Y(pts[i].y)]), X(pts[0].x), Y(pts[0].y), [1, 1], estilo, true); };
+    const transparente = (op, fn) => { try { doc.setGState(new doc.GState({ opacity: op })); fn(); doc.setGState(new doc.GState({ opacity: 1 })); } catch { fn(); } };
+    // Zonas a regar
+    for (const z of t.zonas || []) { doc.setFillColor(232, 245, 222); doc.setDrawColor(88, 160, 3); doc.setLineWidth(0.4); poligono(z, 'FD'); }
+    // Abanicos (claros, para no tapar el caño)
+    for (const a of asps) {
+      const col = rgb(COLORES[a.s % COLORES.length]);
+      let pts;
+      if (a.franja) {
+        const g = a.giro * Math.PI / 180, u = { x: Math.sin(g), y: Math.cos(g) }, v = { x: Math.cos(g), y: -Math.sin(g) };
+        const [v0, v1] = a.franja === 'SS' ? [-a.radio / 2, a.radio / 2] : a.franja === 'LCS' ? [-a.radio, 0] : [0, a.radio];
+        const P = (uu, vv) => ({ x: a.x + u.x * uu + v.x * vv, y: a.y + u.y * uu + v.y * vv });
+        pts = [P(0, v0), P(a.ancho, v0), P(a.ancho, v1), P(0, v1)];
+      } else {
+        const arco = Math.min(360, a.arco), n = Math.max(6, Math.ceil(arco / 8));
+        pts = arco >= 360 ? [] : [{ x: a.x, y: a.y }];
+        for (let i = 0; i <= n; i++) { const r = (a.giro - arco / 2 + arco * i / n) * Math.PI / 180; pts.push({ x: a.x + a.radio * Math.sin(r), y: a.y + a.radio * Math.cos(r) }); }
+      }
+      doc.setFillColor(...col); doc.setDrawColor(...col); doc.setLineWidth(0.15);
+      transparente(0.12, () => poligono(pts, 'F'));
+      transparente(0.5, () => poligono(pts, 'S'));
+    }
+    // Caños, mangueras, codos y cambios de medida
+    obra.sectores.forEach((s, ks) => {
+      if (!O.tieneRamal(s)) return;
+      const col = rgb(COLORES[ks % COLORES.length]), linea = [s.valvulaPos, ...s.ramal];
+      const ubic = s.aspersores.filter(a => a.x != null && a.y != null);
+      for (const cx of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubic)) {
+        const a = ubic[cx.i];
+        doc.setDrawColor(...col); doc.setLineWidth(0.25); doc.line(X(a.x), Y(a.y), X(cx.punto.x), Y(cx.punto.y));
+      }
+      const tramos = medidasDelCano(obra, s, calc[ks]);
+      for (const tr of tramos) {
+        const pts = G.subLinea(linea, tr.desde, tr.hasta);
+        doc.setDrawColor(63, 70, 82); doc.setLineWidth(Math.max(0.6, tr.nominal / 40));
+        for (let i = 1; i < pts.length; i++) doc.line(X(pts[i - 1].x), Y(pts[i - 1].y), X(pts[i].x), Y(pts[i].y));
+        const m = G.subLinea(linea, (tr.desde + tr.hasta) / 2, (tr.desde + tr.hasta) / 2)[0];
+        doc.setFontSize(6.5); doc.setTextColor(63, 70, 82); doc.text(`${tr.nominal} mm`, X(m.x) + 1, Y(m.y) - 1);
+      }
+      for (let i = 1; i < tramos.length; i++) if (tramos[i].nominal !== tramos[i - 1].nominal) {
+        const p = G.subLinea(linea, tramos[i].desde, tramos[i].desde)[0];
+        doc.setFillColor(255, 255, 255); doc.setDrawColor(224, 168, 0); doc.setLineWidth(0.5); doc.circle(X(p.x), Y(p.y), 1.3, 'FD');
+      }
+      s.ramal.forEach((p, i) => {
+        const fin = i === s.ramal.length - 1;
+        doc.setFillColor(255, 255, 255); doc.setDrawColor(63, 70, 82); doc.setLineWidth(0.3); doc.rect(X(p.x) - 0.9, Y(p.y) - 0.9, 1.8, 1.8, 'FD');
+        doc.setFontSize(6); doc.setTextColor(63, 70, 82); doc.text(fin ? 'Tapón' : `C${i + 1}`, X(p.x) + 1.4, Y(p.y) + 2.6);
+      });
+    });
+    // Bomba y válvulas
+    const f = t.fuente;
+    if (f && t.bombaUbicada !== false) {
+      doc.setFillColor(...AZUL); doc.triangle(X(f.x), Y(f.y) - 2, X(f.x) - 1.8, Y(f.y) + 1.2, X(f.x) + 1.8, Y(f.y) + 1.2, 'F');
+      doc.setFontSize(6.5); doc.setTextColor(...AZUL); doc.text(obra.fuente.tipo === 'bomba' ? 'Bomba' : 'Canilla', X(f.x), Y(f.y) + 4.2, { align: 'center' });   // abajo: al lado van las válvulas
+    }
+    obra.sectores.forEach((s, ks) => {
+      if (!s.valvulaPos) return;
+      doc.setFillColor(...rgb(COLORES[ks % COLORES.length])); doc.rect(X(s.valvulaPos.x) - 1.1, Y(s.valvulaPos.y) - 1.1, 2.2, 2.2, 'F');
+      doc.setFontSize(6); doc.setTextColor(255, 255, 255); doc.text(String(ks + 1), X(s.valvulaPos.x), Y(s.valvulaPos.y) + 0.8, { align: 'center' });
+    });
+    // Aspersores con su número (sector.número)
+    for (const a of asps) {
+      doc.setFillColor(...rgb(COLORES[a.s % COLORES.length])); doc.circle(X(a.x), Y(a.y), 1.9, 'F');
+      doc.setFontSize(5.5); doc.setTextColor(255, 255, 255); doc.text(`${a.s + 1}.${a.num}`, X(a.x), Y(a.y) + 0.7, { align: 'center' });
+    }
+    // Referencias
+    let y = oy + t.largo * k + 5;
+    doc.setFontSize(7.5); doc.setTextColor(...GRIS);
+    doc.text('Referencias: 1.3 = sector 1, aspersor 3 · cuadrado de color = válvula del sector · C1, C2 = codos · círculo amarillo = cupla con buje de reducción · línea gris = caño (más gruesa = más diámetro) · línea fina de color = manguera.', margen, y, { maxWidth: cajaW });
+    y += 9;
+    doc.setFontSize(8);
+    obra.sectores.forEach((s, ks) => {
+      doc.setFillColor(...rgb(COLORES[ks % COLORES.length])); doc.rect(margen, y - 2.4, 3, 3, 'F');
+      doc.setTextColor(19, 35, 58); doc.text(s.nombre || `Sector ${ks + 1}`, margen + 4.5, y);
+      y += 4.5;
+    });
+
+    // --- Por sector: recorrido del caño y aspersores ---
+    obra.sectores.forEach((s, ks) => {
+      const cs = calc[ks];
+      doc.addPage(); y = 16;
+      doc.setTextColor(...rgb(COLORES[ks % COLORES.length])); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+      doc.text(s.nombre || `Sector ${ks + 1}`, margen, y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRIS);
+      const r = cs.r;
+      const val = r?.valvula ? `Electroválvula Hunter ${r.valvula.modelo} de ${r.valvula.medida}` : 'Sin electroválvula';
+      doc.text([`${val}. ${r ? `Caudal del sector: ${Math.round(r.caudalTotal ?? r.total ?? 0)} l/min.` : ''}`, cs.error ? `Ojo: ${cs.error}` : ''].filter(Boolean), margen, y + 6);
+      y += 13;
+      if (!s.aspersores.length) { doc.text('Sin aspersores.', margen, y); return; }
+      // Recorrido del caño
+      const filasCano = [];
+      if (O.tieneRamal(s)) {
+        const linea = [s.valvulaPos, ...s.ramal], tramos = medidasDelCano(obra, s, cs);
+        const nombreP = i => i === 0 ? 'Válvula' : i === linea.length - 1 ? 'Final (tapón)' : `Codo C${i}`;
+        let acum = 0;
+        for (let i = 1; i < linea.length; i++) {
+          const largo = Math.hypot(linea[i].x - linea[i - 1].x, linea[i].y - linea[i - 1].y);
+          const medidas = [...new Set(tramos.filter(tr => tr.hasta > acum + 1e-6 && tr.desde < acum + largo - 1e-6).map(tr => tr.nominal))];
+          filasCano.push([`${nombreP(i - 1)} a ${nombreP(i).charAt(0).toLowerCase()}${nombreP(i).slice(1)}`, m1(largo), m1(acum + largo), medidas.map(d => d + ' mm').join(' y luego ')]);
+          acum += largo;
+        }
+        for (let i = 1; i < tramos.length; i++) if (tramos[i].nominal !== tramos[i - 1].nominal)
+          filasCano.push([{ content: `Cupla de ${Math.max(tramos[i].nominal, tramos[i - 1].nominal)} mm + buje de reducción a ${Math.min(tramos[i].nominal, tramos[i - 1].nominal)} mm`, colSpan: 2 }, m1(tramos[i].desde), 'a esa distancia de la válvula']);
+      }
+      if (filasCano.length) {
+        doc.autoTable({ startY: y, margin: { left: margen, right: margen }, theme: 'grid',
+          head: [['Caño principal', 'Metros', 'Desde la válvula', 'Medida']], body: filasCano,
+          styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: LINEA, lineWidth: 0.2, textColor: [19, 35, 58] }, headStyles: { fillColor: [63, 70, 82], textColor: 255 },
+          columnStyles: { 1: { halign: 'right', cellWidth: 18 }, 2: { halign: 'right', cellWidth: 28 } } });
+        y = doc.lastAutoTable.finalY + 5;
+      }
+      // Aspersores en el orden del caño
+      let acum = 0, ant = null;
+      const filas = s.aspersores.map((a, i) => {
+        acum += a.distancia || 0;
+        const ra = r?.aspersores?.[i];
+        const recta = ant && a.x != null && ant.x != null ? m1(Math.hypot(a.x - ant.x, a.y - ant.y)) : '-';
+        if (a.x != null) ant = a;
+        let nombreE = `${a.tipo} ${a.boquilla}`;
+        try { nombreE = R.emisor(O.idEmisor(a)).nombre; } catch { /* queda el tipo y la boquilla */ }
+        return [`${ks + 1}.${O.numero(s, i)}`, `${nombreE}${a.regulador ? ' + ' + a.regulador : ''}`, a.arco ? `${Math.round(a.arco)}°` : '-', a.x != null ? `${Math.round(a.giro || 0)}°` : '-',
+          m1(acum), m1(a.manguera || 0), recta, a.x != null ? `${m1(a.x)} ; ${m1(a.y)}` : 'sin ubicar', ra ? (Math.round(ra.presionBoquilla * 100) / 100).toLocaleString('es-AR') : '-'];
+      });
+      doc.autoTable({ startY: y, margin: { left: margen, right: margen }, theme: 'grid',
+        head: [['N°', 'Aspersor y boquilla', 'Arco', 'Apunta', 'Por el caño desde la válvula (m)', 'Manguera (m)', 'Al anterior en recta (m)', 'X ; Y (m)', 'Presión (bar)']], body: filas,
+        styles: { fontSize: 7.5, cellPadding: 1.4, lineColor: LINEA, lineWidth: 0.2, textColor: [19, 35, 58] }, headStyles: { fillColor: AZUL, textColor: 255, fontSize: 7 },
+        columnStyles: { 0: { cellWidth: 9, fontStyle: 'bold' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 8: { halign: 'right' } } });
+      y = doc.lastAutoTable.finalY + 4;
+      doc.setFontSize(7.5); doc.setTextColor(...GRIS);
+      doc.text('"Apunta": hacia dónde mira el centro del abanico (0° = arriba del plano, 90° = derecha). X ; Y: desde la esquina de abajo a la izquierda del terreno. Cada aspersor se pincha en el caño con conector inicial, manguera y espiga en L.', margen, y, { maxWidth: ancho - 2 * margen });
+    });
+    return doc.output('blob');
+  }
+  // Medida del caño a lo largo del ramal: [{desde, hasta, nominal}] (por tramo dibujado o por aspersor si es automático)
+  function medidasDelCano(obra, s, cs) {
+    const O = global.OBRA, G = global.GEOMETRIA;
+    const porTramo = O.tramosDelRamal(s);
+    if (porTramo) return porTramo.reduce((l, tr) => { if (l.length && l.at(-1).nominal === tr.nominal) l.at(-1).hasta = tr.hasta; else l.push({ desde: tr.desde, hasta: tr.hasta, nominal: tr.nominal }); return l; }, []);
+    const diam = O.diametrosDelSector(obra, s), largo = G.largoDeLinea([s.valvulaPos, ...s.ramal]);
+    const res = [];
+    let acum = 0;
+    s.aspersores.forEach((a, i) => {
+      const d = diam[i] ?? s.lateral.nominal, hasta = acum + (a.distancia || 0);
+      if (res.length && res.at(-1).nominal === d) res.at(-1).hasta = hasta; else res.push({ desde: acum, hasta, nominal: d });
+      acum = hasta;
+    });
+    if (!res.length) return [{ desde: 0, hasta: largo, nominal: s.lateral.nominal }];
+    res.at(-1).hasta = Math.max(res.at(-1).hasta, largo);
+    return res;
+  }
+
   function nombreArchivo(obra) {
     const quien = (obra.nombre || obra.cliente?.nombre || 'obra').replace(/[\\/:*?"<>|]/g, '').trim();
     return `Presupuesto ${numeroTexto(obra.presupuesto.numero)} - ${quien}.pdf`;
   }
 
-  global.PDF = { armarPDF, armarListado, nombreArchivo, numeroTexto };
+  global.PDF = { armarPDF, armarListado, armarDiagrama, nombreArchivo, numeroTexto };
 })(typeof window !== 'undefined' ? window : globalThis);

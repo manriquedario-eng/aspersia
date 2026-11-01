@@ -65,10 +65,15 @@
         ? { tipo: 'bomba', linea: obra.fuente.linea, modelo: obra.fuente.modelo, aspiracion: obra.fuente.aspiracion }
         : { tipo: 'presion', bar: obra.fuente.bar },
       alimentacion: s.alimentacion, valvula: s.valvula, lateral, manguera: s.manguera || null,
-      aspersores: s.aspersores.map(a => ({ emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura, manguera: a.manguera || 0 })),
+      aspersores: s.aspersores.map((a, i) => ({ num: a.num ?? i + 1, emisor: idEmisor(a), regulador: a.regulador || null, distancia: a.distancia, altura: a.altura, manguera: a.manguera || 0 })),
       accesorios: obra.accesorios,
     };
-    if (escalonado && d.aspersores.length) {
+    const porTramo = tramosDelRamal(s);
+    if (porTramo && d.aspersores.length) {
+      // Cada aspersor toma la medida del caño en la mitad del tramo que le llega
+      let acum = 0;
+      d.lateral = { ...lateral, tramos: d.aspersores.map(a => { const medio = acum + (a.distancia || 0) / 2; acum += a.distancia || 0; return nominalEn(porTramo, medio); }) };
+    } else if (escalonado && d.aspersores.length) {
       const t = tramosEscalonados(d);
       if (t) d.lateral = { ...lateral, tramos: t };
     }
@@ -98,6 +103,22 @@
     });
     s.aspersores.splice(0, s.aspersores.length, ...ordenados, ...G.sinUbicar(s));   // mismo arreglo: lo que lo tenga a mano lo sigue viendo
   }
+  // Medida a mano por tramo del caño (Darío: "del 1 al 2 de 50 y del 2 al 3 de 40"). s.ramalDiametros[k] = diámetro del
+  // tramo k (0 = de la válvula al primer punto). Devuelve los tramos dibujados con su medida, o null si no se eligió por tramo.
+  function tramosDelRamal(s) {
+    if (!tieneRamal(s) || !s.ramalDiametros?.some(Boolean)) return null;
+    const linea = [s.valvulaPos, ...s.ramal];
+    let desde = 0, ultimo = s.lateral.nominal;
+    return linea.slice(1).map((p, k) => {
+      const largo = Math.hypot(p.x - linea[k].x, p.y - linea[k].y);
+      ultimo = s.ramalDiametros[k] || ultimo;
+      const t = { k, nominal: ultimo, desde, hasta: desde + largo, largo };
+      desde += largo;
+      return t;
+    });
+  }
+  // Diámetro del caño en un punto del recorrido (metros desde la válvula), con la medida por tramo
+  const nominalEn = (tramos, recorrido) => (tramos.find(t => recorrido <= t.hasta + 1e-9) || tramos.at(-1)).nominal;
   const largoRamal = s => tieneRamal(s) ? global.GEOMETRIA.largoDeLinea([s.valvulaPos, ...s.ramal]) : null;
   const codosRamal = s => tieneRamal(s) ? s.ramal.length - 1 : 0;
 
@@ -119,7 +140,22 @@
     });
   }
 
+  // Número de cada aspersor (Darío): el que le tocó al ponerlo, aunque el caño los ordene distinto para el cálculo.
+  // Los nuevos (o los que llegan de otro sector con un número repetido) toman el siguiente; al quitar uno,
+  // los de arriba bajan un lugar para que no queden huecos.
+  function numerar(s) {
+    const usados = new Set(), nuevos = [];
+    for (const a of s.aspersores) {
+      if (Number.isInteger(a.num) && a.num > 0 && !usados.has(a.num)) usados.add(a.num); else nuevos.push(a);
+    }
+    const viejos = s.aspersores.filter(a => !nuevos.includes(a)).sort((p, q) => p.num - q.num);
+    viejos.forEach((a, k) => { a.num = k + 1; });
+    nuevos.forEach((a, k) => { a.num = viejos.length + k + 1; });
+  }
+  const numero = (s, i) => s.aspersores[i]?.num ?? i + 1;
+
   function sincronizarDistancias(obra) {
+    obra.sectores.forEach(numerar);
     if (!obra.plano) return;
     ubicarValvulas(obra);
     const desdePlano = obra.plano.distanciasDesdePlano;
@@ -161,7 +197,7 @@
         const radio = c.r ? c.r.aspersores[i].radio : e.radios[Math.floor(e.radios.length / 2)];
         const franja = e.tipo === 'MP Rotator de franja' ? (/LCS/.test(e.boquilla) ? 'LCS' : /RCS/.test(e.boquilla) ? 'RCS' : 'SS') : null;
         const arco = e.arco ?? a.arco ?? 360;
-        lista.push({ s: k, i, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre, trayectoria: trayectoria(e) });
+        lista.push({ s: k, i, num: a.num ?? i + 1, x: a.x, y: a.y, giro: a.giro || 0, radio, arco, franja, ancho: 1.5, nombre: e.nombre, trayectoria: trayectoria(e) });
       });
     });
     return lista;
@@ -203,5 +239,5 @@
   // Superficie de las zonas a regar dibujadas en el plano (m²), o null si no hay ninguna.
   const superficieZonas = obra => obra.plano?.zonas?.length ? obra.plano.zonas.reduce((t, z) => t + global.GEOMETRIA.areaPoligono(z), 0) : null;
 
-  global.OBRA = { esAjustable, esMP, arcoLibre, ponerArco, cajaDeObra, cajaPorMes, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  global.OBRA = { tramosDelRamal, nominalEn, numerar, numero, esAjustable, esMP, arcoLibre, ponerArco, cajaDeObra, cajaPorMes, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

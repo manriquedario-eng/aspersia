@@ -129,3 +129,18 @@ test('sugerir cobertura: un aspersor de esquina mal girado → sugiere girarlo d
   assert.equal(s.tipo, 'girar');
   assert.equal(s.valor, -30);
 });
+
+test('alinear con el borde: en un lado 180° hacia adentro; en una esquina torcida abre lo que mide la esquina', () => {
+  // Zona torcida: el lado de abajo sube un poco (no es parejo)
+  const z = [{ x: 0, y: 0 }, { x: 10, y: 1 }, { x: 10, y: 8 }, { x: 0, y: 8 }];
+  const lado = G.alinearConBorde([z], { x: 5, y: 0.5 });
+  assert.equal(lado.tipo, 'lado');
+  assert.equal(lado.arco, 180);
+  assert.equal(lado.giro, Math.round((G.rumbo(10, 1) + 270) % 360));   // perpendicular al lado, hacia adentro (arriba)
+  const esq = G.alinearConBorde([z], { x: 0.2, y: 0.2 });
+  assert.equal(esq.tipo, 'esquina');
+  assert.equal(esq.arco, 84);   // la esquina mide 84,3°: el abanico calza justo con los dos lados
+  assert.equal(G.alinearConBorde([[{ x: 0, y: 0 }, { x: 10, y: 0.4 }, { x: 10, y: 8 }, { x: 0, y: 8 }]], { x: 0.2, y: 0.2 }).arco, 90, 'a 2° de 90 se redondea (sirve la fija)');
+  const esq2 = G.alinearConBorde([z], { x: 10, y: 1 });
+  assert.equal(esq2.arco, Math.round(180 - 84.29));   // 96° (a más de 4° de 90: se deja exacto)
+});

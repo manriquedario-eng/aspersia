@@ -326,7 +326,8 @@ test('caño escalonado y colector: diámetros que bajan, reducciones, codo del d
   const pre = O.presupuesto(o, {});
   const q = clave => pre.renglones.find(r => r.clave === clave)?.cantidad ?? 0;
   // Una reducción en cada cambio de diámetro; el codo de la vuelta (a los 50 m) y el tapón, del último diámetro
-  for (let k = 1; k < grupos.length; k++) assert.equal(q(`reduccion-pvc-k6-${grupos[k - 1].nominal}-${grupos[k].nominal}`), 1);
+  // En cada cambio de diámetro: cupla del grueso + buje de reducción
+  for (let k = 1; k < grupos.length; k++) { assert.equal(q(`buje-pvc-k6-${grupos[k - 1].nominal}-${grupos[k].nominal}`), 1); assert.ok(q(`cupla-pvc-k6-${grupos[k - 1].nominal}`) >= 1); }
   assert.equal(q(`codo-pvc-k6-${diam.at(-1)}`), 1);
   assert.equal(q(`tapon-pvc-k6-${diam.at(-1)}`), 1);
   // Metros de caño: todo el ramal dibujado (54 m), repartido por diámetro (+10 %)
@@ -379,4 +380,28 @@ test('mantenimiento y caja: horas × precio + materiales, cobros, gastos, gananc
   const vieja = A.importar(JSON.stringify({ app: 'Aspersia', version: 3, instalador: {}, precios: {}, siguienteNumero: 1, obras: [{ ...otra, tipo: undefined, cobros: undefined, gastos: undefined }] }));
   assert.equal(vieja.obras[0].tipo, 'riego');
   assert.deepEqual([vieja.obras[0].cobros, vieja.obras[0].gastos], [[], []]);
+});
+
+test('medida por tramo del caño: del 1 al 2 de 50 y del 2 al 3 de 40 → metros por tramo, cupla y buje, cálculo con esas medidas', () => {
+  const { o } = obraDePrueba();
+  o.fuente = { tipo: 'presion', bar: 4 };
+  o.plano.fuente = { x: -0.5, y: 0 };
+  const pgp = x => ({ tipo: 'Turbina PGP Ultra', boquilla: '3.0', arco: 180, regulador: '', distancia: 4, altura: 0, manguera: 1, x, y: 1, giro: 0 });
+  // Válvula en (0,0) → codo 1 (20,0) → final (20,10): tramo 0 de 20 m a 50 mm, tramo 1 de 10 m a 40 mm
+  const s = { ...A.sectorNuevo(1), ramal: [{ x: 20, y: 0 }, { x: 20, y: 10 }], ramalDiametros: [50, 40],
+    aspersores: [pgp(5), pgp(15), { ...pgp(0), x: 21, y: 6 }] };
+  o.sectores = [s];
+  O.sincronizarDistancias(o);
+  const c = O.calcular(o, s);
+  assert.deepEqual(c.r.tramos.map(t => t.nominal), [50, 50, 40], 'cada aspersor con la medida del tramo por donde le llega el caño');
+  const pre = O.presupuesto(o, {});
+  const q = clave => pre.renglones.find(r => r.clave === clave)?.cantidad ?? 0;
+  assert.equal(q('cano-pvc-k6-50'), Math.ceil(20 * 1.1));
+  // el de 40 suma también el caño de la bomba a la válvula (alimentación de 40)
+  assert.equal(q('cano-pvc-k6-40'), Math.ceil((10 + (s.alimentacion.nominal === 40 ? s.alimentacion.largo : 0)) * 1.1));
+  assert.equal(q('cupla-pvc-k6-50'), 1);
+  assert.equal(q('buje-pvc-k6-50-40'), 1);
+  assert.equal(q('codo-pvc-k6-50'), 1);
+  assert.equal(q('tapon-pvc-k6-40'), 1);
+  assert.equal(q('valvula-pgv-15'), 1, 'sale con caño de 50: válvula de 1½"');
 });

@@ -756,7 +756,7 @@
     campo('altura').value = a.altura;
     campo('manguera').value = a.manguera ?? 0;
     campo('manguera').disabled = ramal;
-    li.querySelector('.numero').textContent = i + 1;
+    li.querySelector('.numero').textContent = O.numero(sector(), i);
     li.querySelector('[data-texto=distancia]').textContent = (i ? 'Caño desde el anterior' : 'Caño desde la válvula') + (usaPlano() || ramal ? ' (del plano)' : '');
     li.querySelector('.resumen').textContent = arcoInvalido ? `${a.tipo} ${a.boquilla}: arco de ${a.arco}° no válido`
       : `${e.tipo} ${e.nombre}${a.tipo === 'Turbina PGP Ultra' ? ` a ${a.arco}°` : ''}`;
@@ -1084,6 +1084,21 @@
         if (!w) descargar(archivo);
       }
     } finally { b.disabled = false; b.textContent = 'Ver PDF'; }
+  });
+  // Diagrama de instalación: el plano a escala y, por sector, el recorrido del caño y cada aspersor con sus medidas
+  $('diagrama-pdf').addEventListener('click', async ev => {
+    const b = ev.currentTarget, texto = b.textContent; b.disabled = true; b.textContent = 'Armando el diagrama…';
+    try {
+      const blob = await PDF.armarDiagrama(obra, datos.instalador);
+      const archivo = new File([blob], PDF.nombreArchivo(obra).replace(/^Presupuesto/, 'Diagrama de instalación'), { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        try { await navigator.share({ files: [archivo], title: archivo.name }); } catch (err) { if (err.name !== 'AbortError') descargar(archivo); }
+      } else {
+        const w = window.open(URL.createObjectURL(archivo), '_blank');
+        if (!w) descargar(archivo);
+      }
+    } catch (err) { alert('No se pudo armar el diagrama: ' + err.message); }
+    finally { b.disabled = false; b.textContent = texto; }
   });
   // Listado de materiales para comprar: lo comparte (WhatsApp al proveedor, Archivos) o lo abre
   $('listado-pdf').addEventListener('click', async ev => {
