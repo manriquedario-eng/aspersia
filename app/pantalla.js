@@ -473,14 +473,18 @@
   });
 
   // ---------- Clientes guardados (salen de las obras: el dato más reciente de cada nombre) ----------
-  const clave = n => (n || '').trim().toLowerCase();
+  // Sin acentos, mayúsculas ni espacios de más: "Juan  Pérez" y "juan perez" son el mismo cliente
+  const clave = n => (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  // Cliente borrado: se esconde con las obras que tenía en ese momento (las obras no se tocan).
+  // Si después se hace una obra nueva con ese nombre, vuelve a aparecer.
+  const borrado = (k, o) => (datos.clientesBorrados?.[k] || []).includes(o.id);
   function clientes() {
     const mapa = new Map();
     const obras = [...datos.obras].sort((a, b) => (b.actualizada || '').localeCompare(a.actualizada || ''));
     for (const o of obras) {
       const k = clave(o.cliente?.nombre);
-      if (!k) continue;
-      if (!mapa.has(k)) mapa.set(k, { cliente: { ...o.cliente }, obras: [] });
+      if (!k || borrado(k, o)) continue;
+      if (!mapa.has(k)) mapa.set(k, { clave: k, cliente: { ...o.cliente }, obras: [] });
       mapa.get(k).obras.push(o);
     }
     return [...mapa.values()].sort((a, b) => a.cliente.nombre.localeCompare(b.cliente.nombre));
@@ -491,10 +495,19 @@
         <b>${escapar(c.cliente.nombre)}</b><br><span class="ayuda">${escapar([c.cliente.direccion, c.cliente.localidad, c.cliente.telefono].filter(Boolean).join(' · ') || 'Sin más datos')}</span><br>
         ${c.obras.map(o => `<a class="enlace" href="#/obra/${o.id}/${o.tipo === 'mantenimiento' ? 'presupuesto' : 'plano'}">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${o.tipo === 'mantenimiento' ? 'Mantenimiento' : 'Riego'} · ${escapar(o.estado)}</a>`).join('<br>')}</span>
         <span class="acciones-cliente"><button type="button" class="chico" data-cliente-nuevo="${n}" data-tipo="mantenimiento">+ Mantenimiento</button>
-        <button type="button" class="chico" data-cliente-nuevo="${n}" data-tipo="riego">+ Obra de riego</button></span></li>`).join('')
+        <button type="button" class="chico" data-cliente-nuevo="${n}" data-tipo="riego">+ Obra de riego</button>
+        <button type="button" class="chico peligro" data-cliente-borrar="${n}">Borrar</button></span></li>`).join('')
       : '<li class="ayuda">Todavía no hay clientes: aparecen cuando cargás el nombre en una obra.</li>';
   }
   $('lista-clientes').addEventListener('click', ev => {
+    const x = ev.target.closest('[data-cliente-borrar]');
+    if (x) {
+      if (!x.dataset.confirmar) { x.dataset.confirmar = '1'; x.textContent = 'Tocá de nuevo para borrar el cliente (sus obras quedan)'; return; }
+      const c = clientes()[Number(x.dataset.clienteBorrar)];
+      (datos.clientesBorrados ||= {})[c.clave] = [...(datos.clientesBorrados[c.clave] || []), ...c.obras.map(o => o.id)];
+      A.guardar(datos);
+      return pintarClientes();
+    }
     const b = ev.target.closest('[data-cliente-nuevo]');
     if (!b) return;
     const c = clientes()[Number(b.dataset.clienteNuevo)];
