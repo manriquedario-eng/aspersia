@@ -235,10 +235,16 @@
     const neto = subtotal - descuento;
     const iva = p.iva ? redondear(neto * IVA / 100) : 0;
     const quitados = m.renglones.filter(r => (cambios[r.clave] || {}).quitar);
+    // Opciones (A, B, C…): no se suman. El total es el que se escribe a mano; vacío = "según la opción elegida".
+    // Sin opciones, un total escrito a mano reemplaza a la suma.
+    const opciones = !!p.opciones, totalManual = typeof p.totalManual === 'number' ? p.totalManual : null;
+    const totalCalculado = neto + iva;
+    const total = totalManual ?? (opciones ? 0 : totalCalculado);
     // Todo lo que muestra el PDF va acá adentro: al cerrar el presupuesto se guarda tal cual, y el PDF
     // de un presupuesto enviado no cambia aunque después se toque el diseño.
     return {
-      renglones, quitados, subtotales, subtotal, descuento, descuentoPct: p.descuento || 0, neto, iva, total: neto + iva,
+      renglones, quitados, subtotales, subtotal, descuento, descuentoPct: p.descuento || 0, neto, iva, total, totalCalculado, opciones, totalManual,
+      segunOpcion: opciones && totalManual == null,
       sinPrecio: renglones.filter(r => !r.precio && r.cantidad).length,
       manoObra, materiales, costoMateriales: redondear(costoMateriales), sinCosto, utilidad: redondear(neto - costoMateriales),
       datos: {

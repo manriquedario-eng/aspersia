@@ -109,7 +109,7 @@
       const rs = pre.renglones.filter(r => r.rubro === rubro && r.cantidad && (r.precio || aConfirmar(r)));
       if (!rs.length) continue;
       cuerpo.push([{ content: rubro, colSpan: 4, styles: { fontStyle: 'bold', textColor: AZUL, fillColor: [242, 246, 250] } },
-        { content: P.pesos(pre.subtotales[rubro]), styles: { fontStyle: 'bold', textColor: AZUL, fillColor: [242, 246, 250], halign: 'right' } }]);
+        { content: pre.opciones ? '' : P.pesos(pre.subtotales[rubro]), styles: { fontStyle: 'bold', textColor: AZUL, fillColor: [242, 246, 250], halign: 'right' } }]);
       for (const r of rs) cuerpo.push(aConfirmar(r)
         ? [r.descripcion, cantidad(r.cantidad), r.unidad, { content: 'A confirmar según relevamiento', colSpan: 2, styles: { halign: 'right', fontStyle: 'italic' } }]
         : [r.descripcion, cantidad(r.cantidad), r.unidad, P.pesos(r.precio), P.pesos(r.importe)]);
@@ -126,12 +126,14 @@
     y = doc.lastAutoTable.finalY + 4;
 
     // --- Totales ---
-    const totales = [['Subtotal', P.pesos(pre.subtotal)]];
-    if (pre.descuento) totales.push([`Descuento ${cantidad(pre.descuentoPct ?? p.descuento)} %`, '- ' + P.pesos(pre.descuento)]);
-    if (pre.iva) totales.push([`IVA ${P.IVA} %`, P.pesos(pre.iva)]);
-    if (totales.length === 1) totales.length = 0;
+    const totales = pre.opciones ? [] : [['Subtotal', P.pesos(pre.subtotal)]];
+    if (pre.opciones) { if (pre.descuento) totales.push([`Descuento ${cantidad(pre.descuentoPct ?? p.descuento)} %`, 'sobre la opción']); if (pre.iva) totales.push([`IVA ${P.IVA} %`, 'se suma']); }
+    else if (pre.totalManual != null) totales.length = 0;
+    else if (pre.descuento) totales.push([`Descuento ${cantidad(pre.descuentoPct ?? p.descuento)} %`, '- ' + P.pesos(pre.descuento)]);
+    if (!pre.opciones && pre.totalManual == null && pre.iva) totales.push([`IVA ${P.IVA} %`, P.pesos(pre.iva)]);
+    if (!pre.opciones && totales.length === 1) totales.length = 0;
     totales.push([{ content: 'TOTAL', styles: { fontStyle: 'bold', fontSize: 12, textColor: 255, fillColor: AZUL } },
-      { content: P.pesos(pre.total), styles: { fontStyle: 'bold', fontSize: 12, textColor: 255, fillColor: AZUL } }]);
+      { content: pre.segunOpcion ? 'Según la opción elegida' : P.pesos(pre.total), styles: { fontStyle: 'bold', fontSize: 12, textColor: 255, fillColor: AZUL } }]);
     // Totales a la derecha y condiciones a la izquierda, a la misma altura: así entra todo en una hoja.
     // Si no hay lugar en la hoja, ambos pasan juntos a la siguiente.
     const altoTotales = totales.length * 8.5;

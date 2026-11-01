@@ -841,6 +841,9 @@
     }
     $('pre-iva').checked = !!p.iva;
     $('pre-iva').disabled = fijo;
+    $('pre-opciones').checked = !!p.opciones; $('pre-opciones').disabled = fijo;
+    $('pre-total').value = typeof p.totalManual === 'number' ? fmt(p.totalManual, 2).replace(/,00$/, '') : ''; $('pre-total').disabled = fijo;
+    $('pre-total').placeholder = p.opciones ? 'Vacío = según la opción' : 'Vacío = la suma';
     $('agregar-renglon').hidden = fijo;
     $('agregar-trabajo').hidden = fijo || obra.tipo !== 'mantenimiento';
     const mant = obra.tipo === 'mantenimiento';
@@ -896,11 +899,12 @@
   }
 
   function pintarTotales(pre) {
-    const filas = P.RUBROS.filter(rb => pre.subtotales[rb]).map(rb => `<tr><td>${rb}</td><td>${P.pesos(pre.subtotales[rb])}</td></tr>`);
+    const filas = pre.opciones ? [] : P.RUBROS.filter(rb => pre.subtotales[rb]).map(rb => `<tr><td>${rb}</td><td>${P.pesos(pre.subtotales[rb])}</td></tr>`);
     if (pre.descuento) filas.push(`<tr><td>Descuento ${fmt(pre.descuentoPct ?? obra.presupuesto.descuento, 0)} %</td><td>− ${P.pesos(pre.descuento)}</td></tr>`);
     if (pre.iva) filas.push(`<tr><td>IVA ${P.IVA} %</td><td>${P.pesos(pre.iva)}</td></tr>`);
     const ganancia = pre.costoMateriales > 0 ? `<p class="ayuda">Para vos (no sale en el PDF): los materiales te cuestan ${P.pesos(pre.costoMateriales)}; ganancia estimada ${P.pesos(pre.utilidad)}${pre.neto ? ` (${fmt(pre.utilidad / pre.neto * 100, 0)} % de lo que cobrás sin IVA)` : ''}${pre.sinCosto ? `. Ojo: ${pre.sinCosto} material${pre.sinCosto === 1 ? '' : 'es'} sin costo cargado` : ''}.</p>` : '';
-    $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${P.pesos(pre.total)}</td></tr></table>${ganancia}
+    $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${pre.segunOpcion ? 'Según la opción elegida' : P.pesos(pre.total)}</td></tr></table>
+      ${pre.opciones ? `<p class="ayuda">Son opciones: los renglones no se suman (la suma daría ${P.pesos(pre.totalCalculado)}). Si escribís un total a mano, sale ese.</p>` : pre.totalManual != null ? `<p class="ayuda">Total escrito a mano. La suma da ${P.pesos(pre.totalCalculado)}; borralo para volver a la suma.</p>` : ''}${ganancia}
       ${pre.sinPrecio ? `<ul class="avisos"><li class="aviso">${pre.sinPrecio} renglón${pre.sinPrecio === 1 ? '' : 'es'} sin precio: ${obra.tipo === 'mantenimiento' ? 'los materiales salen en el PDF como "A confirmar según relevamiento"; las horas sin precio no salen' : `no sale${pre.sinPrecio === 1 ? '' : 'n'} en el PDF hasta que le pongas uno`}.</li></ul>` : ''}`;
   }
 
@@ -991,6 +995,16 @@
     if (id === 'pre-desperdicio') pintarPresupuesto(); else pintarTotales(presupuestoDe(obra));
   });
   $('pre-iva').addEventListener('change', ev => { obra.presupuesto.iva = ev.target.checked; guardar(); pintarTotales(presupuestoDe(obra)); });
+  $('pre-opciones').addEventListener('change', ev => {
+    obra.presupuesto.opciones = ev.target.checked;
+    $('pre-total').placeholder = ev.target.checked ? 'Vacío = según la opción' : 'Vacío = la suma';
+    guardar(); pintarTotales(presupuestoDe(obra));
+  });
+  $('pre-total').addEventListener('input', ev => {
+    const v = ev.target.value.trim();
+    obra.presupuesto.totalManual = v === '' ? null : decimal(v);
+    guardar(); pintarTotales(presupuestoDe(obra));
+  });
 
   // ---------- PDF y envío ----------
   async function hacerPDF() {
