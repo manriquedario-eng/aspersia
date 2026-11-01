@@ -255,53 +255,140 @@
       transparente(0.12, () => poligono(pts, 'F'));
       transparente(0.5, () => poligono(pts, 'S'));
     }
-    // Caños, mangueras, codos y cambios de medida
+    // Todo lo que se dibuja queda anotado (cajas y trazos, en mm de la hoja) para que las medidas busquen un lugar
+    // libre (Darío: que nada tape nada). Trazo = [x1, y1, x2, y2, medio grosor].
+    const ocupado = [], trazos = [], rotulos = [];
+    const caja = (x, y, r) => ocupado.push([x - r, y - r, x + r, y + r]);
+    const trazar = (x1, y1, x2, y2, grosor) => { doc.line(x1, y1, x2, y2); trazos.push([x1, y1, x2, y2, grosor / 2]); };
+    // Medida pegada a un trazo (o a un punto, si las dos puntas coinciden); prioridad: las de menor número eligen primero
+    const rotulo = (texto, p, q, color, prioridad, negrita = false) => rotulos.push({ texto, x1: X(p.x), y1: Y(p.y), x2: X(q.x), y2: Y(q.y), color, prioridad, negrita });
+    const masLargo = pts => { let m = [pts[0], pts[pts.length - 1]], l = -1; for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); if (d > l) { l = d; m = [pts[i - 1], pts[i]]; } } return m; };
+    // Caños, mangueras, codos y cambios de medida, con sus cotas
     obra.sectores.forEach((s, ks) => {
       if (!O.tieneRamal(s)) return;
-      const col = rgb(COLORES[ks % COLORES.length]), linea = [s.valvulaPos, ...s.ramal];
+      const linea = [s.valvulaPos, ...s.ramal], largo = G.largoDeLinea(linea);
       const ubic = s.aspersores.filter(a => a.x != null && a.y != null);
-      for (const cx of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubic, t.zonas)) {
-        const a = ubic[cx.i];
-        doc.setDrawColor(...col); doc.setLineWidth(0.25); doc.line(X(a.x), Y(a.y), X(cx.punto.x), Y(cx.punto.y));
+      const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubic, t.zonas);
+      // De una tobera a la siguiente (en el orden del caño), en recta: punteada gris
+      doc.setDrawColor(130, 130, 130); doc.setLineWidth(0.15); doc.setLineDashPattern([0.8, 0.8], 0);
+      for (let j = 1; j < con.length; j++) {
+        const a = ubic[con[j - 1].i], b = ubic[con[j].i], d = Math.hypot(b.x - a.x, b.y - a.y);
+        if (d < 0.05) continue;
+        trazar(X(a.x), Y(a.y), X(b.x), Y(b.y), 0.15);
+        rotulo(`${m1(d)} m`, a, b, [110, 110, 110], 4);
       }
+      doc.setLineDashPattern([], 0);
+      // Mangueras negras con su largo
+      doc.setDrawColor(17, 17, 17); doc.setFillColor(17, 17, 17); doc.setLineWidth(0.3);
+      for (const cx of con) {
+        const a = ubic[cx.i];
+        trazar(X(a.x), Y(a.y), X(cx.punto.x), Y(cx.punto.y), 0.3);
+        doc.circle(X(cx.punto.x), Y(cx.punto.y), 0.5, 'F');
+        rotulo(`${m1(a.manguera ?? cx.manguera)} m`, a, cx.punto, [17, 17, 17], 3);
+      }
+      // Caño: blanco con borde negro (como en el plano de la app), más grueso cuanto más diámetro
       const tramos = medidasDelCano(obra, s, calc[ks]);
       for (const tr of tramos) {
-        const pts = G.subLinea(linea, tr.desde, tr.hasta);
-        doc.setDrawColor(63, 70, 82); doc.setLineWidth(Math.max(0.6, tr.nominal / 40));
-        for (let i = 1; i < pts.length; i++) doc.line(X(pts[i - 1].x), Y(pts[i - 1].y), X(pts[i].x), Y(pts[i].y));
-        const m = G.subLinea(linea, (tr.desde + tr.hasta) / 2, (tr.desde + tr.hasta) / 2)[0];
-        doc.setFontSize(6.5); doc.setTextColor(63, 70, 82); doc.text(`${tr.nominal} mm`, X(m.x) + 1, Y(m.y) - 1);
+        const pts = G.subLinea(linea, tr.desde, tr.hasta), g = Math.max(0.9, tr.nominal / 32);
+        for (const [color, w] of [[[17, 17, 17], g + 0.5], [[255, 255, 255], g]]) {
+          doc.setDrawColor(...color); doc.setLineWidth(w);
+          for (let i = 1; i < pts.length; i++) doc.line(X(pts[i - 1].x), Y(pts[i - 1].y), X(pts[i].x), Y(pts[i].y));
+        }
+        for (let i = 1; i < pts.length; i++) trazos.push([X(pts[i - 1].x), Y(pts[i - 1].y), X(pts[i].x), Y(pts[i].y), (g + 0.5) / 2]);
+        const [p, q] = masLargo(pts);
+        rotulo(`Ø ${tr.nominal}`, p, q, [63, 70, 82], 1);
+      }
+      // Metros de caño entre conexiones (lo que usa el cálculo), y del último aspersor al tapón
+      const marcas = [0];
+      for (const cx of con) marcas.push(marcas.at(-1) + cx.tramo);
+      marcas.push(largo);
+      for (let j = 1; j < marcas.length; j++) {
+        if (marcas[j] - marcas[j - 1] < 0.1) continue;
+        const [p, q] = masLargo(G.subLinea(linea, marcas[j - 1], marcas[j]));
+        rotulo(`${m1(marcas[j] - marcas[j - 1])} m`, p, q, [19, 35, 58], 2, true);
       }
       for (let i = 1; i < tramos.length; i++) if (tramos[i].nominal !== tramos[i - 1].nominal) {
         const p = G.subLinea(linea, tramos[i].desde, tramos[i].desde)[0];
         doc.setFillColor(255, 255, 255); doc.setDrawColor(224, 168, 0); doc.setLineWidth(0.5); doc.circle(X(p.x), Y(p.y), 1.3, 'FD');
+        caja(X(p.x), Y(p.y), 1.5);
       }
       s.ramal.forEach((p, i) => {
-        const fin = i === s.ramal.length - 1;
-        doc.setFillColor(255, 255, 255); doc.setDrawColor(63, 70, 82); doc.setLineWidth(0.3); doc.rect(X(p.x) - 0.9, Y(p.y) - 0.9, 1.8, 1.8, 'FD');
-        doc.setFontSize(6); doc.setTextColor(63, 70, 82); doc.text(fin ? 'Tapón' : `C${i + 1}`, X(p.x) + 1.4, Y(p.y) + 2.6);
+        doc.setFillColor(255, 255, 255); doc.setDrawColor(17, 17, 17); doc.setLineWidth(0.3); doc.rect(X(p.x) - 0.9, Y(p.y) - 0.9, 1.8, 1.8, 'FD');
+        caja(X(p.x), Y(p.y), 1.1);
+        rotulo(i === s.ramal.length - 1 ? 'Tapón' : `C${i + 1}`, p, p, [63, 70, 82], 0);
       });
     });
     // Bomba y válvulas
     const f = t.fuente;
     if (f && t.bombaUbicada !== false) {
       doc.setFillColor(...AZUL); doc.triangle(X(f.x), Y(f.y) - 2, X(f.x) - 1.8, Y(f.y) + 1.2, X(f.x) + 1.8, Y(f.y) + 1.2, 'F');
-      doc.setFontSize(6.5); doc.setTextColor(...AZUL); doc.text(obra.fuente.tipo === 'bomba' ? 'Bomba' : 'Canilla', X(f.x), Y(f.y) + 4.2, { align: 'center' });   // abajo: al lado van las válvulas
+      caja(X(f.x), Y(f.y), 2.1);
+      rotulo(obra.fuente.tipo === 'bomba' ? 'Bomba' : 'Canilla', f, f, AZUL, 0);
     }
     obra.sectores.forEach((s, ks) => {
       if (!s.valvulaPos) return;
       doc.setFillColor(...rgb(COLORES[ks % COLORES.length])); doc.rect(X(s.valvulaPos.x) - 1.1, Y(s.valvulaPos.y) - 1.1, 2.2, 2.2, 'F');
+      caja(X(s.valvulaPos.x), Y(s.valvulaPos.y), 1.2);
       doc.setFontSize(6); doc.setTextColor(255, 255, 255); doc.text(String(ks + 1), X(s.valvulaPos.x), Y(s.valvulaPos.y) + 0.8, { align: 'center' });
     });
     // Aspersores con su número (sector.número)
     for (const a of asps) {
       doc.setFillColor(...rgb(COLORES[a.s % COLORES.length])); doc.circle(X(a.x), Y(a.y), 1.9, 'F');
+      caja(X(a.x), Y(a.y), 2.1);
       doc.setFontSize(5.5); doc.setTextColor(255, 255, 255); doc.text(`${a.s + 1}.${a.num}`, X(a.x), Y(a.y) + 0.7, { align: 'center' });
     }
+    // Cada medida busca, cerca de lo que mide, el primer lugar donde no toca ninguna línea, símbolo ni otra medida
+    // (si no hay ninguno, el que menos toca). Si quedó lejos, una línea fina la une con lo que mide.
+    const corta = ([x1, y1, x2, y2, m], [a, b, c, d]) => {   // segmento contra caja agrandada por el grosor (Liang-Barsky)
+      a -= m; b -= m; c += m; d += m;
+      let t0 = 0, t1 = 1;
+      const dx = x2 - x1, dy = y2 - y1;
+      for (const [p, q] of [[-dx, x1 - a], [dx, c - x1], [-dy, y1 - b], [dy, d - y1]]) {
+        if (Math.abs(p) < 1e-12) { if (q < 0) return false; continue; }
+        const r = q / p;
+        if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+      }
+      return true;
+    };
+    const choques = r => (r[0] < margen || r[2] > ancho - margen || r[1] < y0 || r[3] > y0 + cajaH ? 100 : 0)
+      + ocupado.filter(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]).length
+      + trazos.filter(s => corta(s, r)).length;
+    const DIR = [[1, 0], [0, 1], [-1, 0], [0, -1], [0.71, 0.71], [-0.71, 0.71], [0.71, -0.71], [-0.71, -0.71]];
+    rotulos.sort((p, q) => p.prioridad - q.prioridad);
+    for (const r of rotulos) {
+      doc.setFont('helvetica', r.negrita ? 'bold' : 'normal'); doc.setFontSize(6);
+      const w = doc.getTextWidth(r.texto) + 0.8, h = 2.6;
+      const dx = r.x2 - r.x1, dy = r.y2 - r.y1, L = Math.hypot(dx, dy), lugares = [];
+      if (L < 0.5) {
+        for (const d of [0.6, 2, 4]) for (const [ux, uy] of DIR) lugares.push({ x: r.x1 + ux * (d + Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2), y: r.y1 + uy * (d + Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2), ax: r.x1, ay: r.y1, d });
+      } else {
+        const nx = -dy / L, ny = dx / L, ext = Math.abs(nx) * w / 2 + Math.abs(ny) * h / 2;
+        for (const d of [0.4, 1.8, 3.5, 6]) for (const f of [0.5, 0.35, 0.65, 0.2, 0.8]) for (const lado of [1, -1])
+          lugares.push({ x: r.x1 + dx * f + nx * lado * (d + ext), y: r.y1 + dy * f + ny * lado * (d + ext), ax: r.x1 + dx * f, ay: r.y1 + dy * f, d });
+      }
+      let mejor = null;
+      for (const l of lugares) {
+        const c = [l.x - w / 2, l.y - h / 2, l.x + w / 2, l.y + h / 2], n = choques(c);
+        if (!mejor || n < mejor.n) mejor = { ...l, c, n };
+        if (!n) break;
+      }
+      ocupado.push(mejor.c);
+      r.lugar = mejor;
+    }
+    for (const r of rotulos) if (r.lugar.d >= 3.5) { doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.12); doc.line(r.lugar.ax, r.lugar.ay, r.lugar.x, r.lugar.y); }
+    for (const r of rotulos) {
+      const { c } = r.lugar;
+      doc.setFillColor(255, 255, 255); doc.rect(c[0], c[1], c[2] - c[0], c[3] - c[1], 'F');
+      doc.setFont('helvetica', r.negrita ? 'bold' : 'normal'); doc.setFontSize(6); doc.setTextColor(...r.color);
+      doc.text(r.texto, r.lugar.x, r.lugar.y, { align: 'center', baseline: 'middle' });
+    }
+    doc.setFont('helvetica', 'normal');
     // Referencias
     let y = oy + t.largo * k + 5;
     doc.setFontSize(7.5); doc.setTextColor(...GRIS);
-    doc.text('Referencias: 1.3 = sector 1, aspersor 3 · cuadrado de color = válvula del sector · C1, C2 = codos · círculo amarillo = cupla con buje de reducción · línea gris = caño (más gruesa = más diámetro) · línea fina de color = manguera.', margen, y, { maxWidth: cajaW });
+    doc.text('Referencias: 1.3 = sector 1, aspersor 3 · cuadrado de color = válvula del sector · C1, C2 = codos · círculo amarillo = cupla con buje de reducción · línea blanca con borde negro = caño (más gruesa = más diámetro; Ø = medida en mm) · línea negra = manguera.', margen, y, { maxWidth: cajaW });
+    y += 7.5;
+    doc.text('Cotas en metros: en negrita, metros de caño entre una conexión y la siguiente (y hasta el tapón) · en negro, al lado de cada manguera, su largo · en gris, sobre la línea punteada, de una tobera a la siguiente en línea recta.', margen, y, { maxWidth: cajaW });
     y += 9;
     doc.setFontSize(8);
     obra.sectores.forEach((s, ks) => {
