@@ -147,9 +147,25 @@
         <span class="sector-datos">${escapar(lugar || 'Sin datos del cliente')}</span>
         <span class="sector-datos">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${mant ? 'Mantenimiento' : `${o.sectores.length} sector${o.sectores.length === 1 ? '' : 'es'}`}${total}${cobrado}</span>
         <span class="estado ${CLASE_ESTADO[o.estado] || 'info'}">${escapar(o.estado)}</span>
-      </a></li>`;
+      </a><button type="button" class="chico peligro borrar-obra-lista" data-borrar-obra="${o.id}">Borrar</button></li>`;
     }).join('') : '<li class="vacio"><b>Empezá tu primera obra</b><span>Cargá el cliente, diseñá los sectores y armá el presupuesto.</span></li>';
   }
+  $('lista-obras').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-borrar-obra]');
+    if (!b) return;
+    if (!b.dataset.confirmar) { b.dataset.confirmar = '1'; b.textContent = 'Tocá de nuevo para borrar'; return; }
+    datos.obras = datos.obras.filter(o => o.id !== b.dataset.borrarObra);
+    A.guardar(datos);
+    pintarInicio();
+  });
+  // Botón Guardar: se guarda solo igual, pero así se ve que quedó guardado
+  $('guardar-obra').addEventListener('click', async () => {
+    clearTimeout(pendiente);
+    if (obra) obra.actualizada = A.hoy();
+    const ok = await A.guardar(datos);
+    const h = new Date();
+    $('guardado').textContent = ok ? `Guardado ✓ ${String(h.getHours()).padStart(2, '0')}:${String(h.getMinutes()).padStart(2, '0')}` : 'No se pudo guardar';
+  });
   const nuevaObra = tipo => {
     const o = A.obraNueva(datos, tipo);
     datos.obras.push(o);
@@ -166,6 +182,7 @@
   function abrirObra(p) {
     pestana = p;
     nSector = null;
+    $('guardado').textContent = '';
     mostrar('obra');
     subtitulo(nombreObra(obra));
     const mant = obra.tipo === 'mantenimiento';

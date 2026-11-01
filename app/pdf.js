@@ -141,7 +141,7 @@
     const finTotales = doc.lastAutoTable.finalY;
 
     // --- Condiciones ---
-    const condiciones = [['Forma de pago', p.formaPago], ['Notas', p.notas], ['Validez', `${p.validez} días desde la fecha del presupuesto.`]].filter(([, v]) => v);
+    const condiciones = [['Forma de pago', p.formaPago], ['Datos para el pago', (inst.pago || '').trim()], ['Notas', p.notas], ['Validez', `${p.validez} días desde la fecha del presupuesto.`]].filter(([, v]) => v);
     doc.autoTable({
       startY: yBloque, margin: { left: margen, right: margen + 80 + 6, bottom: 22 }, theme: 'plain', body: condiciones,
       styles: { fontSize: 8.5, cellPadding: { top: 1, bottom: 1, left: 0, right: 3 }, textColor: [19, 35, 58] },

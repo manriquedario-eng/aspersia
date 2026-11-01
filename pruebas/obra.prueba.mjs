@@ -179,7 +179,7 @@ test('copia de seguridad: lo que se guarda es lo que se recupera', async () => {
   const vuelta = A.importar(texto);
   assert.deepEqual(vuelta.obras[0].sectores, o.sectores);
   assert.deepEqual(vuelta.precios, todo.precios);
-  assert.equal(vuelta.siguienteNumero, 13);
+  assert.equal(vuelta.siguienteNumero, 113, 'numeración desde 101');
   assert.throws(() => A.importar('{"hola":1}'), /no es una copia de seguridad/);
 });
 
@@ -214,7 +214,7 @@ test('guardado: lo de localStorage pasa a IndexedDB una sola vez, sin perder nad
     assert.equal(d2.precios.x, 2);
     assert.deepEqual(d2.obras[0].sectores, o.sectores);
     assert.equal(await A.guardarAparte('antes-de-recuperar', d2), true);
-    assert.equal(tablas.get('datos').get('antes-de-recuperar').siguienteNumero, 5);
+    assert.equal(tablas.get('datos').get('antes-de-recuperar').siguienteNumero, 105);
     assert.equal(A.diasDesde(A.hoy()), 0);
   } finally { delete globalThis.indexedDB; delete globalThis.localStorage; }
 });

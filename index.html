@@ -51,7 +51,8 @@
 
   <!-- ===================== Obra ===================== -->
   <div id="vista-obra" class="vista" hidden>
-    <a href="#/" class="volver">‹ Obras</a>
+    <div class="barra-obra"><a href="#/" class="volver">‹ Obras</a>
+      <span><span id="guardado" class="ayuda"></span> <button id="guardar-obra" class="principal lleno" type="button">Guardar</button></span></div>
     <div class="pestanas" role="tablist">
       <a role="tab" data-pestana="cliente">Cliente</a>
       <a role="tab" data-pestana="plano">Plano</a>
@@ -140,6 +141,40 @@
 
     <!-- Plano -->
     <div id="panel-plano" class="panel">
+      <section class="tarjeta plano-tarjeta">
+        <div class="modo-plano" role="tablist">
+          <button type="button" data-modo="2d" aria-selected="true">Plano 2D</button>
+          <button type="button" data-modo="3d" aria-selected="false">Vista 3D</button>
+        </div>
+        <div id="plano-filtro" class="filtro"></div>
+        <div id="plano-acciones"></div>
+        <div id="plano-3d-caja" class="plano-caja" hidden>
+          <div id="plano-3d" class="plano plano-3d"></div>
+          <div class="plano-botones">
+            <button type="button" id="encuadrar-3d" aria-label="Volver a encuadrar">⤢</button>
+            <button type="button" id="agua-3d" aria-label="Pausar o soltar el agua">💧</button>
+          </div>
+          <p class="ayuda">Un dedo gira la vista; dos dedos acercan y la mueven. Lo que cambies en el plano 2D se ve acá al volver.</p>
+        </div>
+        <div id="plano-2d-caja" class="plano-caja">
+          <div id="plano-botones" class="plano-botones">
+            <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
+            <button type="button" data-zoom="menos" aria-label="Alejar">−</button>
+            <button type="button" data-zoom="ajustar" aria-label="Ver todo el terreno">⤢</button>
+          </div>
+          <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
+          <div id="plano-flotante" class="plano-flotante" hidden></div>
+          <div class="rosa" aria-label="Norte"><svg viewBox="-20 -20 40 40" id="plano-rosa"><polygon points="0,-15 5,0 -5,0" class="rosa-n"/><polygon points="0,15 5,0 -5,0" class="rosa-s"/><text x="0" y="-16.5">N</text></svg></div>
+        </div>
+        <div id="plano-capa" class="filtro capas">
+          <button type="button" data-capa="agua">Cobertura de agua</button>
+          <button type="button" data-capa="sol">Sol</button>
+          <button type="button" data-capa="nada">Solo el plano</button>
+        </div>
+        <div id="plano-estadisticas" class="estadisticas"></div>
+        <p class="ayuda leyenda" id="plano-leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
+      </section>
+
       <section class="tarjeta">
         <h2>Terreno</h2>
         <div class="campos dos">
@@ -179,39 +214,6 @@
         <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto. En los sectores con caño principal dibujado, las distancias y las mangueras salen siempre del plano.</p>
       </section>
 
-      <section class="tarjeta plano-tarjeta">
-        <div class="modo-plano" role="tablist">
-          <button type="button" data-modo="2d" aria-selected="true">Plano 2D</button>
-          <button type="button" data-modo="3d" aria-selected="false">Vista 3D</button>
-        </div>
-        <div id="plano-filtro" class="filtro"></div>
-        <div id="plano-acciones"></div>
-        <div id="plano-3d-caja" class="plano-caja" hidden>
-          <div id="plano-3d" class="plano plano-3d"></div>
-          <div class="plano-botones">
-            <button type="button" id="encuadrar-3d" aria-label="Volver a encuadrar">⤢</button>
-            <button type="button" id="agua-3d" aria-label="Pausar o soltar el agua">💧</button>
-          </div>
-          <p class="ayuda">Un dedo gira la vista; dos dedos acercan y la mueven. Lo que cambies en el plano 2D se ve acá al volver.</p>
-        </div>
-        <div id="plano-2d-caja" class="plano-caja">
-          <svg id="plano-svg" class="plano" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del riego"></svg>
-          <div id="plano-flotante" class="plano-flotante" hidden></div>
-          <div class="rosa" aria-label="Norte"><svg viewBox="-20 -20 40 40" id="plano-rosa"><polygon points="0,-15 5,0 -5,0" class="rosa-n"/><polygon points="0,15 5,0 -5,0" class="rosa-s"/><text x="0" y="-16.5">N</text></svg></div>
-          <div id="plano-botones" class="plano-botones">
-            <button type="button" data-zoom="mas" aria-label="Acercar">+</button>
-            <button type="button" data-zoom="menos" aria-label="Alejar">−</button>
-            <button type="button" data-zoom="ajustar" aria-label="Ver todo el terreno">⤢</button>
-          </div>
-        </div>
-        <div id="plano-capa" class="filtro capas">
-          <button type="button" data-capa="agua">Cobertura de agua</button>
-          <button type="button" data-capa="sol">Sol</button>
-          <button type="button" data-capa="nada">Solo el plano</button>
-        </div>
-        <div id="plano-estadisticas" class="estadisticas"></div>
-        <p class="ayuda leyenda" id="plano-leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
-      </section>
 
       <section class="tarjeta" id="plano-seleccion"></section>
     </div>
@@ -389,6 +391,7 @@
         </div>
         <label>Dirección o zona de trabajo <input data-instalador="direccion" type="text" autocomplete="off"></label>
         <label>CUIT <span class="unidad">opcional</span><input data-instalador="cuit" type="text" inputmode="numeric" autocomplete="off"></label>
+        <label>Datos para el pago <span class="unidad">salen en el presupuesto</span><textarea data-instalador="pago" rows="4" placeholder="Mercado Pago&#10;Titular: …&#10;CVU: …&#10;Alias: …"></textarea></label>
         <label>Texto al pie del presupuesto <span class="unidad">opcional</span><textarea data-instalador="pie" rows="2" placeholder="Garantía de 12 meses en la instalación."></textarea></label>
       </div>
     </section>

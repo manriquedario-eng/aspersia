@@ -404,3 +404,18 @@ ol.pasos li { margin: 4px 0; }
 .pestanas a { flex: 1 1 auto; padding-left: 6px; padding-right: 6px; white-space: nowrap; }
 .pestanas a[hidden] { display: none; }
 @media (max-width: 360px) { .pestanas a { font-size: .74rem; padding-left: 3px; padding-right: 3px; } }
+/* Barra de la obra con Guardar, borrar desde la lista y campos que no se solapan (fecha del iPhone) */
+.barra-obra { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.barra-obra .volver { margin: 0; }
+.barra-obra .principal { min-height: 38px; padding: 6px 16px; margin: 0; }
+#lista-obras li { position: relative; }
+.borrar-obra-lista { position: absolute; right: 10px; bottom: 10px; margin: 0; }
+.campos > *, .campos label { min-width: 0; }
+input, select, textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
+input[type=date] { -webkit-appearance: none; appearance: none; width: 100%; display: block; min-height: 44px; }
+/* Barra del plano con 4 botones; caño tocable */
+.botones-plano { grid-template-columns: repeat(2, 1fr); }
+.plano .cano-tocar { fill: none; stroke: transparent; pointer-events: stroke; }
+.etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
+/* Zoom en una fila arriba del plano (no encima de la foto) */
+#plano-botones { position: static; display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }

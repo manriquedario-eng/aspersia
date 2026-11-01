@@ -70,6 +70,11 @@
   }
   // Asegura los campos que agregan las versiones nuevas.
   function completar(datos) {
+    // Darío (31-oct-2026): un presupuesto N° 2 da desconfianza. Los números van de 101 en adelante.
+    if ((datos.siguienteNumero || 1) <= 100) {
+      for (const o of datos.obras) if (o.presupuesto && o.presupuesto.numero <= 100) o.presupuesto.numero += 100;
+      datos.siguienteNumero = (datos.siguienteNumero || 1) + 100;
+    }
     for (const o of datos.obras) {
       o.cliente ||= { nombre: '', direccion: '', localidad: '', telefono: '', correo: '' };
       o.tipo ??= 'riego';
