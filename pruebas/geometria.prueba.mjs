@@ -159,3 +159,18 @@ test('sugerir cobertura: nunca moja afuera de la zona y sugiere cambiar la boqui
   assert.ok(r.despues.bien > r.antes.bien);
   assert.ok(r.pasos[0].celdas.length > 0, 'trae la parte que mejora, para pintarla');
 });
+
+test('la manguera no cruza el límite del lote: va al punto del caño al que se llega por adentro', () => {
+  // Dos lotes separados por un muro (franja entre y = 5 y y = 5,2). El caño va por abajo y sube por la derecha.
+  const lotes = [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }], [{ x: 0, y: 5.2 }, { x: 10, y: 5.2 }, { x: 10, y: 10 }, { x: 0, y: 10 }]];
+  const valvula = { x: 1, y: 1 }, ramal = [{ x: 9, y: 1 }, { x: 9, y: 9 }], asp = { x: 2, y: 7 };
+  // Sin límites: lo más cercano es el tramo de abajo (6 m), cruzando el muro
+  const recto = G.conexionesAlRamal(valvula, ramal, [asp])[0];
+  assert.ok(Math.abs(recto.punto.y - 1) < 1e-6 && Math.abs(recto.punto.x - 2) < 1e-6);
+  assert.ok(G.cruzaBorde(lotes, asp, recto.punto));
+  // Con los límites: va al tramo que sube, por adentro de su lote (7 m), sin cruzar
+  const c = G.conexionesAlRamal(valvula, ramal, [asp], lotes)[0];
+  assert.ok(!G.cruzaBorde(lotes, asp, c.punto), 'la manguera queda adentro del lote');
+  assert.ok(c.punto.x > 8.9 && c.punto.y > 5.2, "se conecta en el tramo de la derecha");
+  assert.ok(Math.abs(c.manguera - 7) < 0.15);
+});

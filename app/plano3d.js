@@ -193,8 +193,8 @@
       const puntos = (conRamal ? [fuente, s.valvulaPos, ...s.ramal] : [fuente, s.valvulaPos]).map(v3);
       const linea = new T.Line(new T.BufferGeometry().setFromPoints(puntos), new T.LineDashedMaterial({ color, dashSize: 0.4, gapSize: 0.25 }));
       linea.computeLineDistances(); scene.add(linea);
-      if (conRamal) for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados))
-        scene.add(new T.Line(new T.BufferGeometry().setFromPoints([v3(ubicados[c.i]), v3(c.punto)]), new T.LineBasicMaterial({ color })));
+      if (conRamal) for (const c of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados, terreno.zonas))
+        scene.add(new T.Line(new T.BufferGeometry().setFromPoints([v3(ubicados[c.i]), v3(c.punto)]), new T.LineBasicMaterial({ color: 0x111111 })));
     });
     const bomba = new T.Mesh(new T.BoxGeometry(0.5, 0.4, 0.4), new T.MeshLambertMaterial({ color: 0x0b4a8f }));
     bomba.position.set(aX(fuente.x), 0.2, aZ(fuente.y)); scene.add(bomba);

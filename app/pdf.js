@@ -260,7 +260,7 @@
       if (!O.tieneRamal(s)) return;
       const col = rgb(COLORES[ks % COLORES.length]), linea = [s.valvulaPos, ...s.ramal];
       const ubic = s.aspersores.filter(a => a.x != null && a.y != null);
-      for (const cx of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubic)) {
+      for (const cx of G.conexionesAlRamal(s.valvulaPos, s.ramal, ubic, t.zonas)) {
         const a = ubic[cx.i];
         doc.setDrawColor(...col); doc.setLineWidth(0.25); doc.line(X(a.x), Y(a.y), X(cx.punto.x), Y(cx.punto.y));
       }

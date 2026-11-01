@@ -92,10 +92,10 @@
   const MANGUERA_MINIMA = 0.5;   // aunque el aspersor esté pegado al caño, siempre lleva un poco de manguera
   const tieneRamal = s => !!(s.ramal && s.ramal.length && s.valvulaPos);
   // Los que todavía no están ubicados en el plano quedan al final, con lo que se escribió a mano.
-  function aplicarRamal(s) {
+  function aplicarRamal(s, zonas) {   // zonas: la manguera no cruza el límite del lote
     const G = global.GEOMETRIA;
     const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
-    const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados);
+    const con = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados, zonas);
     const ordenados = con.map(c => ubicados[c.i]);
     con.forEach((c, k) => {
       ordenados[k].distancia = r1(c.tramo);
@@ -161,7 +161,7 @@
     const desdePlano = obra.plano.distanciasDesdePlano;
     if (!desdePlano && !obra.sectores.some(tieneRamal)) return;
     for (const s of obra.sectores) {
-      if (tieneRamal(s)) aplicarRamal(s);
+      if (tieneRamal(s)) aplicarRamal(s, obra.plano.zonas);
       else if (desdePlano) global.GEOMETRIA.distanciasDesdePlano(s.valvulaPos, s.aspersores).forEach((d, i) => { if (d != null) s.aspersores[i].distancia = d; });
     }
   }
@@ -239,150 +239,5 @@
   // Superficie de las zonas a regar dibujadas en el plano (m²), o null si no hay ninguna.
   const superficieZonas = obra => obra.plano?.zonas?.length ? obra.plano.zonas.reduce((t, z) => t + global.GEOMETRIA.areaPoligono(z), 0) : null;
 
-  // ---------- Sugerir riego completo (Darío: otro plano aparte para comparar; su obra no se toca) ----------
-  // Arma un diseño desde cero sobre la misma zona, la misma bomba y la misma foto:
-  //   1) un aspersor en cada esquina, con el arco que mide la esquina;
-  //   2) aspersores de 180° a lo largo de cada lado, separados lo justo para que se mojen cabeza a cabeza;
-  //   3) si queda ancho, círculos completos adentro en triángulo, a la misma separación;
-  // y elige la boquilla (Pro ajustable o PGP Ultra) que logra buena cobertura con menos aspersores sin mojar afuera.
-  // Después los reparte en sectores según lo que da la bomba y dibuja el caño de cada sector por el medio.
-  // Devuelve una obra nueva (copia), marcada con propuestaDe = id de la obra original.
-  function proponerRiego(obra) {
-    const G = global.GEOMETRIA, Rg = R(), A = global.ALMACEN;
-    const t = obra.plano;
-    const zonas = t.zonas?.length ? t.zonas : [[{ x: 0, y: 0 }, { x: t.ancho, y: 0 }, { x: t.ancho, y: t.largo }, { x: 0, y: t.largo }]];
-    const area = zonas.reduce((s, z) => s + G.areaPoligono(z), 0);
-    const emisor = a => { try { return Rg.emisor(idEmisor(a)); } catch { return null; } };
-    const medio = v => v[Math.floor(v.length / 2)];
-    // Alcance con la presión que le va a llegar (no el del medio de la tabla: con poca presión tira menos).
-    // Canilla: su presión menos ~0,5 bar de caños y válvula; bomba: ~2,5 bar en la boquilla.
-    const pLlega = obra.fuente.tipo === 'bomba' ? 2.5 : Math.max(1, (obra.fuente.bar || 3) - 0.5);
-    const alcanceA = e => e.presiones ? Rg.interpolar(e.presiones, e.radios, pLlega).valor : medio(e.radios);
-    // Boquillas candidatas, con el alcance a esa presión
-    const candidatas = [];
-    for (const [tipo, filtro] of [['Boquilla Pro ajustable', b => /HE$/.test(b)], [Rg.TIPO_MP, b => /^MP(1000|2000|3000|3500)$/.test(b)], ['Turbina PGP Ultra', () => true]]) {
-      const boqs = [...new Set(Rg.emisores().filter(e => e.tipo === tipo).map(e => e.boquilla))].filter(filtro);
-      for (const boquilla of boqs) {
-        const e = emisor({ tipo, boquilla, arco: 180 });
-        // Arcos que admite: MP de 90° a 270° o 360°; MP3500 de 90° a 210° (sin círculo); las demás, cualquiera
-        const arcos = tipo !== Rg.TIPO_MP ? { min: 1, max: 360, circulo: true } : boquilla === 'MP3500' ? { min: 90, max: 210, circulo: false } : { min: 90, max: 270, circulo: true };
-        if (e) candidatas.push({ tipo, boquilla, radio: alcanceA(e), arcos });
-      }
-    }
-    // Lo que da la fuente por sector (hace falta para comparar costos)
-    let capacidad = 40;   // canilla: unos 40 l/min (no se conoce el caudal de la red)
-    if (obra.fuente.tipo === 'bomba') {
-      try {
-        const b = Rg.bomba(obra.fuente.linea, obra.fuente.modelo), altura = 30 + (obra.fuente.aspiracion || 0);   // ~3 bar a la salida
-        const ok = b.caudales.filter((q, i) => b.alturas[i] >= altura);
-        capacidad = ok.length ? Math.max(...ok) : b.caudales[0];
-      } catch { /* bomba desconocida: queda el valor de canilla */ }
-    }
-    capacidad *= 0.9;
-    const adentro = (p, d = 0.05) => G.enZonas(zonas, p.x, p.y) || zonas.some(z => G.puntoMasCercano([...z, z[0]], p).distancia <= d);
-    function armar(c, factor) {
-      const sep = c.radio * factor;   // 0,95 = cabeza a cabeza; más abierto = menos aspersores
-      const asps = [];
-      const poner = (x, y, giro, arco) => {
-        // Arco dentro de lo que admite la boquilla (una MP no baja de 90°)
-        arco = Math.round(arco);
-        if (arco >= 360 && !c.arcos.circulo) return;
-        if (arco < 360) arco = Math.min(c.arcos.max, Math.max(c.arcos.min, arco));
-        asps.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, giro: Math.round(giro) % 360, arco, radio: c.radio });
-      };
-      for (const z of zonas) z.forEach((v, i) => {
-        const al = G.alinearConBorde(zonas, v, 0.01);
-        if (al) poner(v.x, v.y, al.giro, al.arco);
-        const w = z[(i + 1) % z.length], largo = Math.hypot(w.x - v.x, w.y - v.y), n = Math.max(1, Math.ceil(largo / sep));
-        for (let k = 1; k < n; k++) {
-          const p = { x: v.x + (w.x - v.x) * k / n, y: v.y + (w.y - v.y) * k / n };
-          const b = G.rumbo(w.x - v.x, w.y - v.y), giros = [(b + 90) % 360, (b + 270) % 360];
-          const giro = giros.find(g => G.enZonas(zonas, p.x + 0.4 * Math.sin(g * Math.PI / 180), p.y + 0.4 * Math.cos(g * Math.PI / 180))) ?? giros[0];
-          poner(p.x, p.y, giro, 180);
-        }
-      });
-      // Adentro, en triángulo, lejos de los bordes (los bordes ya tienen sus aspersores)
-      const xs = zonas.flat().map(p => p.x), ys = zonas.flat().map(p => p.y);
-      const fila = sep * 0.866;
-      for (let j = 1, y = Math.min(...ys) + fila; y < Math.max(...ys); j++, y += fila)
-        for (let x = Math.min(...xs) + (j % 2 ? sep / 2 : sep); x < Math.max(...xs); x += sep) {
-          const p = { x, y };
-          if (!G.enZonas(zonas, x, y)) continue;
-          const borde = Math.min(...zonas.map(z => G.puntoMasCercano([...z, z[0]], p).distancia));
-          if (borde >= c.radio) poner(x, y, 0, 360);   // a un alcance del borde: el círculo no moja afuera
-        }
-      const cob = G.cobertura(t, asps, Math.max(0.15, Math.min(0.4, Math.sqrt(area) / 60)), zonas);
-      // Lo que moja afuera de la zona (veredas, paredes): muestreo dentro del alcance de cada uno
-      let afuera = 0;
-      for (const a of asps) for (let u = 0; u < 12; u++) for (let v = 0; v < 12; v++) {
-        const x = a.x - a.radio + (u + 0.5) * a.radio / 6, y = a.y - a.radio + (v + 0.5) * a.radio / 6;
-        if (G.riega(a, x, y) && !adentro({ x, y }, 0)) afuera += (a.radio / 6) ** 2;
-      }
-      // Costo aproximado (Darío: equilibrio entre cobertura y costo): cada aspersor 1; cada sector (válvula, estación
-      // del programador y su caño) como 4 aspersores
-      const caudal = asps.reduce((s, a) => { const e = emisor({ tipo: c.tipo, boquilla: c.boquilla, arco: a.arco }); return s + (e ? medio(e.caudales) : 10); }, 0);
-      const sectores = Math.max(1, Math.ceil(caudal / capacidad));
-      return { c, asps, cob, afuera, sectores, costo: asps.length + 4 * sectores };
-    }
-    const opciones = candidatas.flatMap(c => [0.95, 1.1, 1.25].map(f => armar(c, f))).filter(o => o.asps.length);
-    // La mejor: la más barata que riega bien (80 % o más con dos aspersores, casi nada seco) sin mojar afuera
-    const sirve = o => o.cob.bien >= 80 && o.cob.seco <= 3 && o.afuera <= area * 0.05;   // casi nada afuera (Darío: no romper la línea del terreno)
-    const elegida = opciones.filter(sirve).sort((p, q) => p.costo - q.costo || q.cob.bien - p.cob.bien)[0]
-      || opciones.sort((p, q) => (q.cob.bien - q.afuera / area * 100) - (p.cob.bien - p.afuera / area * 100))[0];
-    if (!elegida) throw new Error('No se pudo armar una propuesta: dibujá primero la zona a regar.');
-    const { c } = elegida;
-
-    // Caudal de cada aspersor y lo que da la fuente por sector
-    const caudalDe = a => { const e = emisor({ tipo: c.tipo, boquilla: c.boquilla, arco: a.arco }); return e ? medio(e.caudales) : 10; };
-    // Sectores en gajos que salen desde la bomba (así cada caño va derecho a su sector sin cruzar los otros):
-    // los aspersores se ordenan por la dirección en que se ven desde la bomba y se corta cuando se pasa del caudal
-    const f = t.fuente || { x: 0, y: 0 };
-    const angulos = elegida.asps.map(a => ({ a, r: G.rumbo(a.x - f.x, a.y - f.y) })).sort((p, q) => p.r - q.r);
-    let corte = 0, hueco = -1;
-    angulos.forEach((p, i) => { const sig = angulos[(i + 1) % angulos.length], h = ((sig.r - p.r) % 360 + 360) % 360 || (angulos.length === 1 ? 360 : 0); if (h > hueco) { hueco = h; corte = (i + 1) % angulos.length; } });
-    const ordenados = [...angulos.slice(corte), ...angulos.slice(0, corte)].map(p => p.a);
-    const eje = (lista, mx, my) => {
-      let sxx = 0, syy = 0, sxy = 0;
-      for (const a of lista) { sxx += (a.x - mx) ** 2; syy += (a.y - my) ** 2; sxy += (a.x - mx) * (a.y - my); }
-      const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-      return { x: Math.cos(ang), y: Math.sin(ang) };
-    };
-    const grupos = [[]];
-    let suma = 0;
-    for (const a of ordenados) {
-      const q = caudalDe(a);
-      if (grupos.at(-1).length && suma + q > capacidad) { grupos.push([]); suma = 0; }
-      grupos.at(-1).push(a); suma += q;
-    }
-
-    const nueva = JSON.parse(JSON.stringify(obra));
-    Object.assign(nueva, {
-      id: A.nuevoId(), creada: A.hoy(), actualizada: A.hoy(), estado: 'Borrador', cobros: [], gastos: [],
-      nombre: 'Propuesta de la app', propuestaDe: obra.id,
-      propuesta: { boquilla: `${c.tipo} ${c.boquilla}`, aspersores: elegida.asps.length, bien: Math.round(elegida.cob.bien), capacidad: Math.round(capacidad) },
-    });
-    nueva.presupuesto = { ...nueva.presupuesto, cambios: {}, propios: [], congelado: null, manoObra: { ...(obra.presupuesto.manoObra || {}), fijo: null } };
-    nueva.plano.trabado = false;
-    nueva.sectores = grupos.map((g, k) => {
-      const s = A.sectorNuevo(k + 1);
-      s.lateral = { ...s.lateral, escalonado: true };
-      s.aspersores = g.map((a, i) => ({ tipo: c.tipo, boquilla: c.boquilla, arco: a.arco, regulador: '', distancia: 1, altura: 0, manguera: 1, x: a.x, y: a.y, giro: a.giro, num: i + 1 }));
-      return s;
-    });
-    ubicarValvulas(nueva);
-    // Caño de cada sector: de la válvula al comienzo del eje del sector y por el medio, hasta la otra punta
-    nueva.sectores.forEach(s => {
-      const mx = s.aspersores.reduce((t, a) => t + a.x, 0) / s.aspersores.length, my = s.aspersores.reduce((t, a) => t + a.y, 0) / s.aspersores.length;
-      const e = s.aspersores.length > 1 ? eje(s.aspersores, mx, my) : { x: 1, y: 0 };
-      const pr = s.aspersores.map(a => (a.x - mx) * e.x + (a.y - my) * e.y);
-      let p1 = { x: mx + e.x * Math.min(...pr), y: my + e.y * Math.min(...pr) }, p2 = { x: mx + e.x * Math.max(...pr), y: my + e.y * Math.max(...pr) };
-      if (Math.hypot(p2.x - s.valvulaPos.x, p2.y - s.valvulaPos.y) < Math.hypot(p1.x - s.valvulaPos.x, p1.y - s.valvulaPos.y)) [p1, p2] = [p2, p1];
-      const r2 = v => Math.round(v * 100) / 100;
-      s.ramal = (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 0.5 ? [p1] : [p1, p2]).map(p => ({ x: r2(p.x), y: r2(p.y) }));
-    });
-    sincronizarDistancias(nueva);
-    return nueva;
-  }
-
-  global.OBRA = { proponerRiego, tramosDelRamal, nominalEn, numerar, numero, esAjustable, esMP, arcoLibre, ponerArco, cajaDeObra, cajaPorMes, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
+  global.OBRA = { tramosDelRamal, nominalEn, numerar, numero, esAjustable, esMP, arcoLibre, ponerArco, cajaDeObra, cajaPorMes, superficieZonas, diametrosDelSector, ubicarValvulas, SEPARACION_VALVULAS, tieneRamal, largoRamal, codosRamal, MANGUERA_MINIMA, idEmisor, paraCalcular, calcular, sincronizarDistancias, presupuesto, trayectoria, aspersoresDelPlano };
 })(typeof window !== 'undefined' ? window : globalThis);

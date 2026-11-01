@@ -151,10 +151,36 @@
 
   // Conexión de cada aspersor al ramal, en el orden en que los va pasando el caño desde la válvula:
   // [{ i (índice del aspersor), punto, manguera (m), tramo (m de caño desde la conexión anterior o la válvula) }].
-  function conexionesAlRamal(valvula, ramal, aspersores) {
+  // ¿El segmento a-b cruza el borde de alguna zona? (cruce de verdad: tocar el borde en una punta no cuenta,
+  // así un aspersor puesto justo sobre el límite igual puede conectarse)
+  function cruzaBorde(zonas, a, b) {
+    const lado = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    for (const z of zonas || []) for (let i = 0; i < z.length; i++) {
+      const p = z[i], q = z[(i + 1) % z.length];
+      const d1 = lado(p, q, a), d2 = lado(p, q, b), d3 = lado(a, b, p), d4 = lado(a, b, q), e = 1e-9;
+      if (((d1 > e && d2 < -e) || (d1 < -e && d2 > e)) && ((d3 > e && d4 < -e) || (d3 < -e && d4 > e))) return true;
+    }
+    return false;
+  }
+  // Punto del caño donde se conecta la manguera: el más cercano al que se llega sin cruzar el límite del lote
+  // (Darío: los límites son reales, como un muro). Si no hay ninguno, el más cercano.
+  function conexionSinCruzar(linea, p, zonas) {
+    const cerca = puntoMasCercano(linea, p);
+    if (!zonas?.length || !cruzaBorde(zonas, p, cerca.punto)) return cerca;
+    const largo = largoDeLinea(linea), paso = Math.max(0.05, Math.min(0.1, largo / 600));
+    let mejor = null;
+    for (let r = 0; r <= largo + 1e-9; r += paso) {
+      const q = subLinea(linea, r, r)[0];
+      if (!q) continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if ((!mejor || d < mejor.distancia) && !cruzaBorde(zonas, p, q)) mejor = { punto: q, distancia: d, recorrido: r };
+    }
+    return mejor || cerca;
+  }
+  function conexionesAlRamal(valvula, ramal, aspersores, zonas = null) {
     const linea = [valvula, ...ramal];
     let anterior = 0;
-    return aspersores.map((a, i) => ({ i, ...puntoMasCercano(linea, a) }))
+    return aspersores.map((a, i) => ({ i, ...conexionSinCruzar(linea, a, zonas) }))
       .sort((x, y) => x.recorrido - y.recorrido || x.i - y.i)
       .map(c => {
         const tramo = c.recorrido - anterior;
@@ -328,6 +354,6 @@
     return { antes, despues, pasos, faltan: faltan.slice(0, 3), paso: { x: dx, y: dy } };
   }
 
-  global.GEOMETRIA = { alinearConBorde, sugerirCobertura, rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
+  global.GEOMETRIA = { cruzaBorde, alinearConBorde, sugerirCobertura, rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
     largoDeLinea, puntoMasCercano, conexionesAlRamal, subLinea, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
 })(typeof window !== 'undefined' ? window : globalThis);

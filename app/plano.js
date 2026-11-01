@@ -158,7 +158,7 @@
       if (!O().tieneRamal(s)) return;   // nunca una manguera a la bomba: hasta que se dibuje el caño, no hay conexiones
       const linea = [s.valvulaPos, ...s.ramal], largo = G.largoDeLinea(linea);
       el('polyline', { points: linea.map(P).join(' '), 'stroke-width': 30 * escala, 'data-cano': k, class: 'cano-tocar' }, canos);
-      const conexiones = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados);
+      const conexiones = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados, t.zonas);
       // Tramos del mismo diámetro: desde la válvula (o el último cambio) hasta la conexión donde cambia
       let desde = 0, recorrido = 0;
       const cortes = [];
@@ -186,8 +186,9 @@
       }
       for (const c of conexiones) {
         const a = ubicados[c.i];
-        el('line', { x1: a.x, y1: Y(a.y), x2: c.punto.x, y2: Y(c.punto.y), stroke: colorSector(k), 'stroke-width': 1.5 * escala, class: 'manguera' }, canos);
-        el('circle', { cx: c.punto.x, cy: Y(c.punto.y), r: 2.5 * escala, fill: colorSector(k) }, canos);
+        // Manguera negra (Darío: que se distinga del caño blanco y de los abanicos)
+        el('line', { x1: a.x, y1: Y(a.y), x2: c.punto.x, y2: Y(c.punto.y), stroke: '#111', 'stroke-width': 1.8 * escala, class: 'manguera' }, canos);
+        el('circle', { cx: c.punto.x, cy: Y(c.punto.y), r: 2.5 * escala, fill: '#111' }, canos);
       }
       // Codos y final del caño: se arrastran para acomodar el recorrido
       s.ramal.forEach((p, i) => {
@@ -282,7 +283,7 @@
     if (sol) html = `<p class="ayuda">El sol pasa por el norte: el lado de ${S.ladoDelPlano(t.norte || 0)} del plano recibe más sol y el de ${S.ladoDelPlano((t.norte || 0) + 180)}, menos. Es orientativo: lo que queda justo al sur de una casa, un muro o un árbol tiene más sombra.</p>`;
     if (!sol && ctx.aspersores().length >= 2) html += pintarConsulta();
     ctx.estadisticas.innerHTML = html;
-    const piezas = '▲ fuente · ■ válvula · línea blanca con borde negro: caño · línea fina: manguera · fucsia: el aspersor elegido · □ codo';
+    const piezas = '▲ fuente · ■ válvula · línea blanca con borde negro: caño · línea negra: manguera · fucsia: el aspersor elegido · □ codo';
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol ? `<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ${piezas}`
       : t.verCobertura ? `<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ${piezas}` : piezas;
     pintarAcciones();

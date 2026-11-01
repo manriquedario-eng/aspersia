@@ -3,7 +3,7 @@
 // Al cambiar archivos de la app, subir VERSION para que el teléfono descarte lo viejo.
 // Siempre se piden los archivos frescos al servidor (sin la memoria intermedia del navegador, que en GitHub Pages
 // guarda hasta 10 minutos): si no, una versión nueva podía guardarse con archivos viejos mezclados.
-const VERSION = 'aspersia-v43';
+const VERSION = 'aspersia-v44';
 const ARCHIVOS = [
   './',
   'index.html',
