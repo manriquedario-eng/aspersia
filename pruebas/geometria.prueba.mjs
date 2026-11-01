@@ -120,11 +120,11 @@ test('sugerir cobertura: un aspersor de esquina mal girado → sugiere girarlo d
   const t = { ancho: 8, largo: 8 };
   const esq = (x, y, giro) => ({ x, y, giro, arco: 90, radio: 8.5 });
   const bien = [esq(0, 0, 45), esq(8, 0, 315), esq(8, 8, 225), esq(0, 8, 135)];
-  assert.equal(G.sugerirCobertura(t, bien, null).sugerencias.length, 0, 'bien regado: nada que sugerir');
+  assert.equal(G.sugerirCobertura(t, bien, null).pasos.length, 0, 'bien regado: nada que sugerir');
   const mal = [esq(0, 0, 75), ...bien.slice(1)];
   const r = G.sugerirCobertura(t, mal, null, mal.map(() => ({ arco: null })));
   assert.ok(r.antes.uno > 0);
-  const s = r.sugerencias[0];
+  const s = r.pasos[0];
   assert.equal(s.k, 0);
   assert.equal(s.tipo, 'girar');
   assert.equal(s.valor, -30);
@@ -143,4 +143,19 @@ test('alinear con el borde: en un lado 180° hacia adentro; en una esquina torci
   assert.equal(G.alinearConBorde([[{ x: 0, y: 0 }, { x: 10, y: 0.4 }, { x: 10, y: 8 }, { x: 0, y: 8 }]], { x: 0.2, y: 0.2 }).arco, 90, 'a 2° de 90 se redondea (sirve la fija)');
   const esq2 = G.alinearConBorde([z], { x: 10, y: 1 });
   assert.equal(esq2.arco, Math.round(180 - 84.29));   // 96° (a más de 4° de 90: se deja exacto)
+});
+
+test('sugerir cobertura: nunca moja afuera de la zona y sugiere cambiar la boquilla', () => {
+  // Cantero de 7 × 4 m; dos aspersores de 90° en las esquinas de abajo, regando hacia adentro, con un hueco en el medio
+  const t = { ancho: 7, largo: 4 }, zona = [[{ x: 0, y: 0 }, { x: 7, y: 0 }, { x: 7, y: 4 }, { x: 0, y: 4 }]];
+  const lista = [{ x: 0, y: 0, giro: 45, arco: 90, radio: 3, boquilla: '10' }, { x: 7, y: 0, giro: 315, arco: 90, radio: 3, boquilla: '10' }];
+  // Boquillas posibles: la 15 (alcance 4,6 m) se pasa del borde de arriba; la 12 (3,7 m) no
+  const op = lista.map(() => ({ arco: [25, 360], boquillas: [{ boquilla: '12', radio: 3.7 }, { boquilla: '15', radio: 4.6 }] }));
+  const r = G.sugerirCobertura(t, lista, zona, op);
+  assert.ok(r.pasos.length >= 1);
+  assert.ok(r.pasos.every(p => !(p.tipo === 'arco' && p.valor > 90)), 'abrir el arco de la esquina mojaría la vereda');
+  assert.ok(r.pasos.every(p => !(p.tipo === 'boquilla' && p.valor === '15')), 'la 15 se pasa del borde de arriba');
+  assert.ok(r.pasos.some(p => p.tipo === 'boquilla' && p.valor === '12'), 'la 12 cubre más sin salirse');
+  assert.ok(r.despues.bien > r.antes.bien);
+  assert.ok(r.pasos[0].celdas.length > 0, 'trae la parte que mejora, para pintarla');
 });

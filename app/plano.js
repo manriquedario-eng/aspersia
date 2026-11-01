@@ -251,8 +251,11 @@
       txt.textContent = `${Math.round(arco)}°`;
     }
     if (consulta?.marca) {
-      el('circle', { cx: consulta.marca.x, cy: Y(consulta.marca.y), r: Math.max(0.6, 14 * escala), class: 'marca-sugerida', 'stroke-width': 3 * escala }, svg);
-      el('circle', { cx: consulta.marca.x, cy: Y(consulta.marca.y), r: 3 * escala, class: 'marca-sugerida-centro' }, svg);
+      // La parte de la que habla la idea, pintada de un color que no se usa en el plano
+      const pc = consulta.paso || { x: 0.35, y: 0.35 }, g = el('g', { class: 'marca-sugerida' }, svg);
+      for (const [x, y] of consulta.marca.celdas || []) el('rect', { x: x - pc.x / 2, y: Y(y) - pc.y / 2, width: pc.x, height: pc.y }, g);
+      const p = consulta.marca.punto;
+      if (p) el('circle', { cx: p.x, cy: Y(p.y), r: Math.max(0.5, 12 * escala), class: 'marca-sugerida-borde', 'stroke-width': 3 * escala }, svg);
     }
     if (ctx.rosa) ctx.rosa.style.transform = `rotate(${t.norte || 0}deg)`;
     const candado = ctx.botones?.querySelector('[data-zoom="candado"]');
@@ -529,63 +532,105 @@
   const mismaPieza = (a, b) => !!a && !!b && a.tipo === b.tipo && a.s === b.s && a.i === b.i;
 
   // ---------- Sugerir mejoras de cobertura: una consulta (botón), no un aviso ----------
+  // Cada idea trae "Ver" (lleva al plano y pinta la parte que mejora) y "Aplicar"; arriba, "Aplicar todas".
+  // Después de aplicar queda "Deshacer" (vuelve los aspersores tocados a como estaban).
   let consulta = null, consultaAplicada = false;
   const DIRECCIONES = ['arriba', 'arriba a la derecha', 'a la derecha', 'abajo a la derecha', 'abajo', 'abajo a la izquierda', 'a la izquierda', 'arriba a la izquierda'];
   const direccion = r => DIRECCIONES[Math.round((((r % 360) + 360) % 360) / 45) % 8];
   const limpio = t => String(t).replace(/[<>&]/g, '');
+  const m1 = v => String(v).replace('.', ',');
+  // Qué se le puede cambiar a cada aspersor: el arco (si es libre) y la boquilla (otras del mismo tipo que sirven con su arco)
+  function opcionesDe(p) {
+    const a = ctx.obra.sectores[p.s].aspersores[p.i], R = global.RIEGO;
+    const arco = p.franja || !O().arcoLibre(a) ? null : O().esMP(a) ? (a.boquilla === 'MP3500' ? [90, 210] : [90, 270]) : [25, 360];
+    const boquillas = [];
+    if (!p.franja && ctx.tobera) {
+      let medio = null;
+      try { const e = R.emisor(O().idEmisor(a)); medio = e.radios[Math.floor(e.radios.length / 2)]; } catch { /* sin datos: no se prueban boquillas */ }
+      if (medio) for (const [b] of ctx.tobera.boquillas(a.tipo)) {
+        if (b === a.boquilla) continue;
+        const copia = { ...a, boquilla: b };
+        ctx.tobera.normalizar(copia);
+        if (copia.arco !== a.arco || copia.boquilla !== b) continue;   // con otro arco no es el mismo aspersor
+        try { const e = R.emisor(O().idEmisor(copia)); boquillas.push({ boquilla: b, radio: p.radio * e.radios[Math.floor(e.radios.length / 2)] / medio }); } catch { /* esa combinación no existe */ }
+      }
+    }
+    return { arco, boquillas };
+  }
   function armarConsulta() {
     const lista = ctx.aspersores();
-    const limites = lista.map(p => {
-      const a = ctx.obra.sectores[p.s].aspersores[p.i];
-      if (p.franja || !O().arcoLibre(a)) return { arco: null };
-      return { arco: O().esMP(a) ? (a.boquilla === 'MP3500' ? [90, 210] : [90, 270]) : [25, 360] };
-    });
-    const r = G.sugerirCobertura(plano(), lista, plano().zonas, limites);
+    const r = G.sugerirCobertura(plano(), lista.map(p => ({ ...p, boquilla: ctx.obra.sectores[p.s].aspersores[p.i].boquilla })), plano().zonas, lista.map(opcionesDe));
     const quien = k => `el aspersor ${lista[k].num ?? lista[k].i + 1} de ${limpio(nombre(lista[k].s))}`;
-    const items = r.sugerencias.map(s => {
+    const items = r.pasos.map(s => {
       const p = lista[s.k], vec = s.vecino != null ? ` entre él y ${quien(s.vecino)}` : '';
       const mejora = s.bien >= 0.1 ? `Bien cubierto: +${s.bien.toFixed(1).replace('.', ',')} %.` : 'Queda menos parte seca.';
       let texto;
-      if (s.tipo === 'girar') texto = `Girá ${quien(s.k)} ${Math.abs(s.valor)}° ${s.valor > 0 ? 'a la derecha (como el reloj)' : 'a la izquierda'}: cubre mejor la parte${vec} que hoy riega uno solo. ${mejora}`;
-      else if (s.tipo === 'arco') texto = `${s.valor > p.arco ? 'Abrí' : 'Cerrá'} el arco de ${quien(s.k)} de ${Math.round(p.arco)}° a ${s.valor}°: mejora la parte${vec}. ${mejora}`;
+      if (s.tipo === 'girar') texto = `Girá ${quien(s.k)} ${Math.abs(s.valor)}° ${s.valor > 0 ? 'a la derecha (como el reloj)' : 'a la izquierda'}: cubre mejor la parte${vec}.`;
+      else if (s.tipo === 'arco') texto = `${s.valor > p.arco ? 'Abrí' : 'Cerrá'} el arco de ${quien(s.k)} de ${Math.round(p.arco)}° a ${s.valor}°: mejora la parte${vec}, sin mojar afuera.`;
+      else if (s.tipo === 'boquilla') texto = `Cambiá la boquilla ${quien(s.k).replace(/^el/, 'del')}: de la ${limpio(s.de)} a la ${limpio(s.valor)}. Llega mejor a la parte${vec} sin pasarse del borde.`;
       else if (s.lados && s.lados.contrario > s.lados.haciaDonde)
-        texto = `${quien(s.k).replace(/^el/, 'El')} (círculo completo) superpone mucho ${direccion(s.valor.rumbo + 180)} y poco ${direccion(s.valor.rumbo)}: corrélo ${String(s.valor.metros).replace('.', ',')} m ${direccion(s.valor.rumbo)}. ${mejora}`;
-      else texto = `Corré ${quien(s.k)} ${String(s.valor.metros).replace('.', ',')} m ${direccion(s.valor.rumbo)}: cubre mejor la parte${vec}. ${mejora}`;
-      return { texto, s: p.s, i: p.i, tipo: s.tipo, valor: s.valor, punto: s.punto };
+        texto = `${quien(s.k).replace(/^el/, 'El')} (círculo completo) superpone mucho ${direccion(s.valor.rumbo + 180)} y poco ${direccion(s.valor.rumbo)}: corrélo ${m1(s.valor.metros)} m ${direccion(s.valor.rumbo)}.`;
+      else texto = `Corré ${quien(s.k)} ${m1(s.valor.metros)} m ${direccion(s.valor.rumbo)}: cubre mejor la parte${vec}.`;
+      return { texto, mejora, s: p.s, i: p.i, tipo: s.tipo, valor: s.valor, punto: s.punto, celdas: s.celdas };
     });
-    const faltan = r.faltan.map(f => ({ ...f, texto: f.m2 > 25 ? `Queda una parte grande (${String(f.m2).replace('.', ',')} m²) ${f.seca ? 'seca' : 'regada por un solo aspersor'}: faltan aspersores en esa parte.` : `Queda una parte de ${String(f.m2).replace('.', ',')} m² ${f.seca ? 'seca' : 'regada por un solo aspersor'}. Si con los cambios de arriba no se cubre, convendría agregar un aspersor ahí.` }));
-    return { antes: r.antes, items, faltan, marca: null };
+    const faltan = r.faltan.map(f => ({ ...f, texto: f.m2 > 25 ? `Queda una parte grande (${m1(f.m2)} m²) ${f.seca ? 'seca' : 'regada por un solo aspersor'}: faltan aspersores ahí.`
+      : `Queda una parte de ${m1(f.m2)} m² ${f.seca ? 'seca' : 'regada por un solo aspersor'}${items.length ? ', aun con los cambios de arriba' : ''}: con otro aspersor ahí se lograría superposición.` }));
+    return { antes: r.antes, despues: r.despues, items, faltan, paso: r.paso, marca: null };
   }
   function pintarConsulta() {
     if (!consulta) return `<div class="consulta"><button type="button" class="chico" data-sugerir="calcular">Sugerir mejoras de cobertura</button></div>`;
-    if (consulta.hecho) return `<div class="consulta"><p class="ayuda">Aplicado: ${consulta.hecho}</p><button type="button" class="chico" data-sugerir="calcular">Sugerir de nuevo</button></div>`;
+    if (consulta.hecho) return `<div class="consulta"><p class="sel-titulo">Aplicado</p><ul class="sugerencias">${consulta.hecho.map(t => `<li><span>${t}</span></li>`).join('')}</ul>
+      <div class="acciones-sug"><button type="button" class="chico peligro" data-sugerir="deshacer">Deshacer</button><button type="button" class="chico" data-sugerir="calcular">Sugerir de nuevo</button></div></div>`;
     const ver = (tipo, n) => `<button type="button" class="chico" data-sugerir="${tipo}" data-n="${n}">Ver</button>`;
     const filas = [
-      ...consulta.items.map((x, n) => `<li><span>${x.texto}</span><span class="acciones-sug">${ver('ver', n)}<button type="button" class="chico activo" data-sugerir="aplicar" data-n="${n}">Aplicar</button></span></li>`),
-      ...consulta.faltan.map((f, n) => `<li><span>${f.texto}</span><span class="acciones-sug">${ver('ver-falta', n)}</span></li>`),
+      ...consulta.items.map((x, n) => `<li class="${consulta.viendo === 'i' + n ? 'viendo' : ''}"><span>${x.texto} <b>${x.mejora}</b></span><span class="acciones-sug">${ver('ver', n)}<button type="button" class="chico activo" data-sugerir="aplicar" data-n="${n}">Aplicar</button></span></li>`),
+      ...consulta.faltan.map((f, n) => `<li class="${consulta.viendo === 'f' + n ? 'viendo' : ''}"><span>${f.texto}</span><span class="acciones-sug">${ver('ver-falta', n)}</span></li>`),
     ];
-    const a = consulta.antes;
+    const a = consulta.antes, d = consulta.despues;
     return `<div class="consulta"><p class="sel-titulo">Sugerencias para mejorar la cobertura</p>
-      ${a ? `<p class="ayuda">Hoy: ${a.bien.toFixed(0)} % bien cubierto, ${a.uno.toFixed(0)} % con un solo aspersor, ${a.seco.toFixed(0)} % seco (dentro de la zona a regar). Son ideas: aplicá las que te sirvan.</p>` : ''}
-      ${filas.length ? `<ul class="sugerencias">${filas.join('')}</ul>` : '<p class="ayuda">No encontré cambios chicos que mejoren la cobertura: así como está, está bien.</p>'}
+      ${a ? `<p class="ayuda">Hoy: ${a.bien.toFixed(0)} % bien cubierto, ${a.uno.toFixed(0)} % con un solo aspersor, ${a.seco.toFixed(0)} % seco (dentro de la zona). Ninguna idea moja afuera de la zona. Van en orden: cada una cuenta con las de arriba hechas.</p>` : ''}
+      ${consulta.items.length > 1 ? `<button type="button" class="chico activo" data-sugerir="aplicar-todas">Aplicar todas (bien cubierto: ${a.bien.toFixed(1).replace('.', ',')} % → ${d.bien.toFixed(1).replace('.', ',')} %)</button>` : ''}
+      ${filas.length ? `<ul class="sugerencias">${filas.join('')}</ul>` : '<p class="ayuda">No encontré cambios chicos que mejoren la cobertura sin mojar afuera: así como está, está bien.</p>'}
       <button type="button" class="chico" data-sugerir="cerrar">Cerrar</button></div>`;
+  }
+  // Lleva la vista al plano, centrada en la parte de la que habla la idea
+  function mirarA(p) {
+    if (p) vista = { ...vista, x: p.x - vista.w / 2, y: Y(p.y) - vista.h / 2 };
+    pintar();
+    // Sube hasta el plano (debajo de las pestañas de la obra, que quedan fijas arriba)
+    setTimeout(() => window.scrollBy({ top: ctx.svg.getBoundingClientRect().top - 80 }), 0);
+  }
+  function aplicarIdea(x) {
+    const obj = ctx.obra.sectores[x.s].aspersores[x.i];
+    const antes = { obj, datos: { giro: obj.giro, arco: obj.arco, x: obj.x, y: obj.y, tipo: obj.tipo, boquilla: obj.boquilla } };
+    if (x.tipo === 'girar') obj.giro = (((obj.giro || 0) + x.valor) % 360 + 360) % 360;
+    if (x.tipo === 'arco') { try { avisoArco = O().ponerArco(obj, x.valor) || ''; } catch (err) { avisoArco = err.message; } }
+    if (x.tipo === 'mover') { obj.x = x.valor.x; obj.y = x.valor.y; }
+    if (x.tipo === 'boquilla') { obj.boquilla = x.valor; ctx.tobera?.normalizar(obj); }
+    return antes;
   }
   function accionConsulta(b) {
     const accion = b.dataset.sugerir, n = Number(b.dataset.n);
     if (accion === 'calcular') { b.textContent = 'Pensando…'; b.disabled = true; setTimeout(() => { consulta = armarConsulta(); pintar(); }, 30); return; }
     if (accion === 'cerrar') { consulta = null; return pintar(); }
-    if (accion === 'ver-falta') { consulta.marca = consulta.faltan[n]; seleccion = null; return pintar(); }
-    const x = consulta.items[n];
-    if (accion === 'ver') { consulta.marca = x.punto; seleccion = { tipo: 'asp', s: x.s, i: x.i }; return pintar(); }
-    if (accion === 'aplicar') {
-      const obj = ctx.obra.sectores[x.s].aspersores[x.i];
+    if (accion === 'ver-falta') { const f = consulta.faltan[n]; consulta.marca = { celdas: f.celdas, punto: f }; consulta.viendo = 'f' + n; seleccion = null; return mirarA(f); }
+    if (accion === 'deshacer') {
+      for (const c of (consulta.deshacer || []).reverse()) Object.assign(c.obj, c.datos);
       avisoArco = '';
-      if (x.tipo === 'girar') obj.giro = (((obj.giro || 0) + x.valor) % 360 + 360) % 360;
-      if (x.tipo === 'arco') { try { avisoArco = O().ponerArco(obj, x.valor) || ''; } catch (err) { avisoArco = err.message; } }
-      if (x.tipo === 'mover') { obj.x = x.valor.x; obj.y = x.valor.y; }
-      seleccion = { tipo: 'asp', s: x.s, i: x.i };
+      consulta = null;
+      avisarCambio(true);
+      return pintar();
+    }
+    const elegidas = accion === 'aplicar-todas' ? consulta.items : [consulta.items[n]];
+    const x = elegidas[0];
+    if (accion === 'ver') { consulta.marca = { celdas: x.celdas, punto: x.punto }; consulta.viendo = 'i' + n; seleccion = { tipo: 'asp', s: x.s, i: x.i }; return mirarA(x.punto); }
+    if (accion === 'aplicar' || accion === 'aplicar-todas') {
+      avisoArco = '';
+      const deshacer = elegidas.map(aplicarIdea);
+      const hecho = elegidas.map(e => e.texto);
+      seleccion = elegidas.length === 1 ? { tipo: 'asp', s: x.s, i: x.i } : null;
       consultaAplicada = true;
-      consulta = { hecho: x.texto.replace(/ (Bien cubierto|Queda menos).*$/, '') };
+      consulta = { hecho, deshacer };
       avisarCambio(true);
       consultaAplicada = false;
       return pintar();
