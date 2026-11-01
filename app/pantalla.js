@@ -128,6 +128,7 @@
     if (seccion === 'caja') { mostrar('caja'); subtitulo('Caja'); return pintarCaja(); }
     mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio(); pintarRecordatorio();
     // Versión guardada en el teléfono (para saber si ya se actualizó)
+    $('actualizar-app').hidden = !('serviceWorker' in navigator);
     window.caches?.keys().then(k => { const v = k.find(n => n.startsWith('aspersia-v')); $('version-app').textContent = v ? `Versión ${v.replace('aspersia-v', '')}` : ''; }).catch(() => {});
   }
   const subtitulo = t => $('subtitulo').textContent = t;
@@ -447,6 +448,26 @@
     $('obra-trabajo').value = obra.trabajo || '';
   }
   $('obra-trabajo').addEventListener('input', ev => { obra.trabajo = ev.target.value; guardar(); });
+  // ---------- Actualizar la app sin cerrarla: busca la versión nueva, la baja entera y recarga ----------
+  $('actualizar-app').addEventListener('click', async ev => {
+    const b = ev.target;
+    const aviso = t => { b.textContent = t; };
+    try {
+      b.disabled = true; aviso('Buscando…');
+      await A.guardar(datos);
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) { location.reload(); return; }
+      await reg.update();
+      const nuevo = reg.installing || reg.waiting;
+      if (!nuevo) { aviso('Ya tenés la última versión ✓'); setTimeout(() => { b.disabled = false; aviso('Buscar actualización'); }, 3000); return; }
+      aviso('Bajando la versión nueva…');
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+      nuevo.addEventListener('statechange', () => { if (nuevo.state === 'redundant') { b.disabled = false; aviso('No se pudo: probá de nuevo'); } });
+    } catch {
+      b.disabled = false; aviso('Sin señal: probá más tarde');
+    }
+  });
+
   // ---------- Clientes guardados (salen de las obras: el dato más reciente de cada nombre) ----------
   const clave = n => (n || '').trim().toLowerCase();
   function clientes() {
