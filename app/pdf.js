@@ -169,10 +169,44 @@
     return doc.output('blob');
   }
 
+  // Listado de materiales para comprar (al corralón o al proveedor): cantidades, sin precios.
+  async function armarListado(obra, pre, inst) {
+    const { jsPDF } = global.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ancho = 210, margen = 16;
+    let y = 14;
+    const img = await logo();
+    if (img) doc.addImage(img.datos, img.formato, margen, y, 22, 19, 'logo', 'SLOW');
+    doc.setTextColor(...AZUL); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+    doc.text('Listado de materiales', ancho - margen, y + 7, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...GRIS);
+    const c = obra.cliente || {};
+    const lineas = [`Obra N° ${numeroTexto(obra.presupuesto.numero)}${c.nombre ? ' · ' + c.nombre : ''}`,
+      [c.direccion, c.localidad].filter(Boolean).join(', '), `Fecha: ${fechaLarga(new Date().toISOString().slice(0, 10))}`,
+      inst.comercial || inst.nombre ? `${inst.comercial || 'Aspersia'}${inst.telefono ? ' · Tel. ' + inst.telefono : ''}` : ''].filter(Boolean);
+    lineas.forEach((t, i) => doc.text(t, ancho - margen, y + 13 + i * 4.4, { align: 'right' }));
+    y = Math.max(y + 24, y + 15 + lineas.length * 4.4);
+    doc.setDrawColor(...VERDE); doc.setLineWidth(0.8); doc.line(margen, y, ancho - margen, y);
+    y += 6;
+    const rs = pre.renglones.filter(r => r.rubro === 'Materiales' && r.cantidad > 0 && (r.descripcion || '').trim());
+    doc.autoTable({
+      startY: y, margin: { left: margen, right: margen, bottom: 18 }, theme: 'grid',
+      head: [['Material', 'Cantidad', 'Unidad', 'Listo']],
+      body: rs.map(r => [r.descripcion, cantidad(r.cantidad), r.unidad || '', '']),
+      styles: { fontSize: 10, cellPadding: 2.2, textColor: [19, 35, 58], lineColor: LINEA, lineWidth: 0.2 },
+      headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right', cellWidth: 22 }, 2: { halign: 'center', cellWidth: 18 }, 3: { cellWidth: 14 } },
+    });
+    y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(8.5); doc.setTextColor(...GRIS);
+    doc.text(`${rs.length} materiales. Las cantidades de caño y manguera ya incluyen el desperdicio.`, margen, y);
+    return doc.output('blob');
+  }
+
   function nombreArchivo(obra) {
     const quien = (obra.nombre || obra.cliente?.nombre || 'obra').replace(/[\\/:*?"<>|]/g, '').trim();
     return `Presupuesto ${numeroTexto(obra.presupuesto.numero)} - ${quien}.pdf`;
   }
 
-  global.PDF = { armarPDF, nombreArchivo, numeroTexto };
+  global.PDF = { armarPDF, armarListado, nombreArchivo, numeroTexto };
 })(typeof window !== 'undefined' ? window : globalThis);

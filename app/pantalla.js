@@ -254,8 +254,13 @@
   // ---------- Foto o captura de fondo (por ejemplo, Google Maps en vista satélite) ----------
   const LADO_MAX_FONDO = 1600;   // px: se achica para que entre en el teléfono (~150 a 300 KB)
 
+  let terrenoPlegado = null;
   function pintarFondo() {
     const f = obra.plano.fondo;
+    // Con la foto ya cargada, la tarjeta del terreno queda plegada en una línea (casi no se usa más)
+    const clave = obra.id + (f ? ':foto' : '');
+    if (terrenoPlegado !== clave) { terrenoPlegado = clave; $('terreno-caja').open = !f; }
+    $('terreno-resumen').textContent = `${fmt(obra.plano.ancho, 1)} × ${fmt(obra.plano.largo, 1)} m${f ? ' · con foto' : ''}`;
     $('fondo-acciones').hidden = !f;
     $('fondo-calibrar').hidden = true;
     if (!f) return;
@@ -354,6 +359,8 @@
     // Al escalar con un lado de la zona cambia el tamaño del terreno y de la foto
     alEscalar: () => { $('plano-ancho').value = obra.plano.ancho; $('plano-largo').value = obra.plano.largo; pintarFondo(); },
     alCambiar: () => { sincronizarDistancias(); guardar(); },
+    // Para elegir la tobera desde el plano, con las mismas reglas que Diseño
+    tobera: { tipos: TIPOS, boquillas: tipo => boquillas(tipo).map(b => [b, etiquetaBoquilla(tipo, b)]), normalizar: normalizarAspersor },
   });
   $('plano-ancho').addEventListener('change', ev => medidaTerreno('ancho', ev.target.value));
   $('plano-largo').addEventListener('change', ev => medidaTerreno('largo', ev.target.value));
@@ -397,7 +404,7 @@
       const c = calcular(s);
       L.push('');
       L.push(`SECTOR ${k + 1}: ${s.nombre}${s.superficie && !O.superficieZonas(obra) ? ` · ${fmt(s.superficie, 0)} m²` : ''}`);
-      L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Válvula PGV 1": ${s.valvula ? 'sí' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm, con tapón al final. ` +
+      L.push(`Caño hasta la válvula: ${R.CANOS[s.alimentacion.material].nombre} ${s.alimentacion.nominal} mm, ${fmt(s.alimentacion.largo, 1)} m, desnivel ${fmt(s.alimentacion.desnivel, 1)} m. Electroválvula PGV: ${s.valvula ? 'sí (la medida sale del caudal y del caño)' : 'no'}. Caño del sector: ${R.CANOS[s.lateral.material].nombre} ${s.lateral.nominal} mm, con tapón al final. ` +
         `Cada aspersor sale del caño con conector inicial, manguera ${R.MANGUERAS[s.manguera || 'pe-12'].nombre} (hasta 6 m) y espiga en L.`);
       if (O.tieneRamal(s)) L.push(`Caño principal dibujado en el plano: ${fmt(O.largoRamal(s), 1)} m con ${O.codosRamal(s)} codo(s), por los puntos ${[s.valvulaPos, ...s.ramal].map(p => `(${fmt(p.x, 1)}; ${fmt(p.y, 1)})`).join(' → ')}. La manguera de cada aspersor va en línea recta hasta el caño.`);
       if (c.error) { L.push(`Error de cálculo: ${c.error}`); return; }
@@ -712,26 +719,35 @@
       completarAspersor(li, a, i);
     });
   }
-  function completarAspersor(li, a, i) {
-    const campo = n => li.querySelector(`[data-campo=${n}]`);
-    a.tipo = opciones(campo('tipo'), TIPOS.map(t => [t, t]), a.tipo);
-    a.boquilla = opciones(campo('boquilla'), boquillas(a.tipo).map(b => [b, etiquetaBoquilla(a.tipo, b)]), a.boquilla);
+  // Deja el aspersor con un tipo, una boquilla y un arco que existen. La usan Diseño y el panel del aspersor en el plano.
+  function normalizarAspersor(a) {
+    if (!TIPOS.includes(a.tipo)) a.tipo = TIPOS[0];
+    // Al cambiar de tipo queda la boquilla del mismo tamaño si existe (ajustable 15A-HE → fija 15)
+    if (!boquillas(a.tipo).includes(a.boquilla)) a.boquilla = boquillas(a.tipo).find(b => parseInt(b) === parseInt(a.boquilla)) || boquillas(a.tipo)[0];
     // El arco se escribe libre en todas (Darío). Las fijas que no traen ese arco pasan a la ajustable (OBRA.ponerArco).
     const libre = arcoLibre(a);
     const listaArcos = libre ? [] : arcos(a.tipo, a.boquilla);
     const conArco = libre || listaArcos.length > 0;
-    li.querySelector('[data-solo=arco-libre]').hidden = !conArco;
     if (libre) a.arco = Math.min(360, Math.max(1, Math.round(Number(a.arco) || (esAjustable(a) || esMP(a) ? 180 : 360))));
-    else if (conArco && !listaArcos.includes(Number(a.arco))) a.arco = listaArcos.includes(180) ? 180 : listaArcos[0];
+    else if (conArco && !listaArcos.includes(Number(a.arco)))   // el arco de la lista más parecido al que tenía
+      a.arco = Number(a.arco) ? listaArcos.reduce((m, x) => Math.abs(x - a.arco) < Math.abs(m - a.arco) ? x : m) : (listaArcos.includes(180) ? 180 : listaArcos[0]);
     else a.arco = conArco ? Number(a.arco) : null;
-    if (conArco) campo('arcoLibre').value = a.arco;
     // Con un arco que la boquilla no admite (por ejemplo una MP a 300°) no hay aspersor para calcular:
-    // se sigue mostrando la tarjeta y el error aparece en el resultado del sector.
+    // se sigue mostrando y el error aparece en el resultado del sector.
     let e, arcoInvalido = false;
     try { e = R.emisor(idEmisor(a)); } catch { e = deTipo(a.tipo).find(x => x.boquilla === a.boquilla); arcoInvalido = true; }
     const conCuerpo = e.cuerpo === 'Pro-Spray';
-    li.querySelector('[data-solo=regulador]').hidden = !conCuerpo;
     if (!conCuerpo) a.regulador = '';
+    return { conArco, e, arcoInvalido, conCuerpo };
+  }
+  function completarAspersor(li, a, i) {
+    const campo = n => li.querySelector(`[data-campo=${n}]`);
+    a.tipo = opciones(campo('tipo'), TIPOS.map(t => [t, t]), a.tipo);
+    a.boquilla = opciones(campo('boquilla'), boquillas(a.tipo).map(b => [b, etiquetaBoquilla(a.tipo, b)]), a.boquilla);
+    const { conArco, e, arcoInvalido, conCuerpo } = normalizarAspersor(a);
+    li.querySelector('[data-solo=arco-libre]').hidden = !conArco;
+    if (conArco) campo('arcoLibre').value = a.arco;
+    li.querySelector('[data-solo=regulador]').hidden = !conCuerpo;
     campo('regulador').value = a.regulador || '';
     // Con el ramal dibujado en el plano, la distancia y la manguera salen de ahí (no se escriben).
     const ramal = O.tieneRamal(sector());
@@ -818,7 +834,7 @@
     else recorrido.push(`Fuente: <b>${fmt(r.fuente.presion, 2)} bar</b>`);
     if (r.alimentacion) recorrido.push(`Colector a la salida de la bomba (${r.alimentacion.cano}, ${fmt(r.alimentacion.largo, 0)} m): pierde ${fmt(r.alimentacion.perdida, 2)} bar, el agua va a ${fmt(r.alimentacion.velocidad, 2)} m/s`);
     recorrido.push(`Llega a la válvula con <b>${fmt(r.presionValvula, 2)} bar</b>`);
-    if (sector().valvula) recorrido.push(`La PGV de 1" pierde ${fmt(r.perdidaValvula, 2)} bar → sale con <b>${fmt(r.presionSalidaValvula, 2)} bar</b>`);
+    if (sector().valvula) recorrido.push(`La ${r.valvula?.modelo || 'PGV'} de ${r.valvula?.medida || '1"'} pierde ${fmt(r.perdidaValvula, 2)} bar → sale con <b>${fmt(r.presionSalidaValvula, 2)} bar</b>`);
     const conManguera = r.aspersores.filter(a => a.manguera > 0);
     if (conManguera.length) {
       const pm = conManguera.map(a => a.perdidaManguera);
@@ -1068,6 +1084,20 @@
         if (!w) descargar(archivo);
       }
     } finally { b.disabled = false; b.textContent = 'Ver PDF'; }
+  });
+  // Listado de materiales para comprar: lo comparte (WhatsApp al proveedor, Archivos) o lo abre
+  $('listado-pdf').addEventListener('click', async ev => {
+    const b = ev.currentTarget, texto = b.textContent; b.disabled = true; b.textContent = 'Armando el listado…';
+    try {
+      const blob = await PDF.armarListado(obra, presupuestoDe(obra), datos.instalador);
+      const archivo = new File([blob], PDF.nombreArchivo(obra).replace(/^Presupuesto/, 'Materiales'), { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        try { await navigator.share({ files: [archivo], title: archivo.name }); } catch (err) { if (err.name !== 'AbortError') descargar(archivo); }
+      } else {
+        const w = window.open(URL.createObjectURL(archivo), '_blank');
+        if (!w) descargar(archivo);
+      }
+    } finally { b.disabled = false; b.textContent = texto; }
   });
   $('enviar-pdf').addEventListener('click', async ev => {
     const b = ev.currentTarget; b.disabled = true; b.textContent = 'Armando PDF…';

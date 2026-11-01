@@ -178,7 +178,7 @@
       </section>
 
       <section class="tarjeta">
-        <h2>Terreno</h2>
+        <details id="terreno-caja" class="terreno" open><summary><h2>Terreno y foto</h2><span class="ayuda" id="terreno-resumen"></span></summary>
         <div class="campos dos">
           <label>Ancho <span class="unidad">m</span><input id="plano-ancho" type="text" inputmode="decimal" autocomplete="off" min="1" step="0.5"></label>
           <label>Largo <span class="unidad">m</span><input id="plano-largo" type="text" inputmode="decimal" autocomplete="off" min="1" step="0.5"></label>
@@ -214,6 +214,7 @@
         </details>
         <label class="tilde"><input id="plano-distancias" type="checkbox"> Calcular los caños con las distancias del plano</label>
         <p class="ayuda">Si está marcado, la distancia entre aspersores y el largo hasta cada válvula salen de dónde los ubicás acá, y se usan en el cálculo y en el presupuesto. En los sectores con caño principal dibujado, las distancias y las mangueras salen siempre del plano.</p>
+        </details>
       </section>
 
 
@@ -279,6 +280,7 @@
         <button id="ver-pdf" class="principal" type="button">Ver PDF</button>
         <button id="enviar-pdf" class="principal lleno" type="button">Enviar al cliente</button>
       </div>
+      <button id="listado-pdf" class="principal ancho" type="button">Listado de materiales (sin precios)</button>
       <p class="ayuda centro" id="aviso-envio">"Enviar al cliente" arma el PDF, abre WhatsApp o el correo del teléfono y deja el presupuesto como Enviado.</p>
     </div>
 
@@ -370,7 +372,7 @@
         <label>Desnivel <span class="unidad">m</span><input id="alim-desnivel" type="text" inputmode="decimal" autocomplete="off" step="0.5"></label>
       </div>
       <p class="ayuda">El largo sale solo: medio metro de colector por válvula. Desnivel: positivo si la válvula está más alta que la bomba.</p>
-      <label class="tilde"><input id="valvula" type="checkbox"> Electroválvula Hunter PGV de 1"</label>
+      <label class="tilde"><input id="valvula" type="checkbox"> Electroválvula Hunter PGV (1", 1½" o 2" según el caudal y el caño)</label>
     </section>
 
     <section class="tarjeta">

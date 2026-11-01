@@ -53,6 +53,21 @@
     return { valor: ys[i - 1] + t * (ys[i] - ys[i - 1]), fuera: 0 };
   }
 
+  // Electroválvula Hunter PGV según el caudal del sector y el caño que sale de ella (Darío: con caño de 50 no va
+  // una de 1", ahorca el caño). Por caño: hasta 40 mm → 1"; 50 mm → 1½"; 63 mm o más → 2".
+  // Por caudal (catálogo págs. 87 y 89): PGV-101 hasta 150 l/min; PGV-151 hasta 27 m3/h (450 l/min); PGV-201 hasta 34 m3/h.
+  const VALVULAS = [
+    { medida: '1"', modelo: 'PGV-101', clave: '1', maxLmin: 150, tabla: () => global.HUNTER.pgv1 },
+    { medida: '1½"', modelo: 'PGV-151', clave: '15', maxLmin: 450, tabla: () => global.HUNTER.pgv15 },
+    { medida: '2"', modelo: 'PGV-201', clave: '2', maxLmin: 34 * 1000 / 60, tabla: () => global.HUNTER.pgv2 },
+  ];
+  function elegirValvula(caudalLmin, nominalCano) {
+    const porCano = nominalCano >= 63 ? 2 : nominalCano >= 50 ? 1 : 0;
+    const porCaudal = caudalLmin <= 150 ? 0 : caudalLmin <= 450 ? 1 : 2;
+    const v = VALVULAS[Math.max(porCano, porCaudal)];
+    return { ...v, tabla: v.tabla() };
+  }
+
   // Pérdida por fricción en bar (Hazen-Williams). caudal en l/min, largo en m, di en mm.
   function perdidaCano(caudalLmin, largo, di, C) {
     if (caudalLmin <= 0 || largo <= 0) return 0;
@@ -181,7 +196,7 @@
   // sector = {
   //   fuente: { tipo: 'presion', bar } | { tipo: 'bomba', linea, modelo, aspiracion (m que la bomba sube el agua al aspirar) },
   //   alimentacion: { material, nominal, largo, desnivel },   // de la fuente a la válvula; desnivel en m (+ si la válvula está más alta)
-  //   valvula: true | false,                                    // electroválvula PGV de 1"
+  //   valvula: true | false,                                    // electroválvula PGV (1", 1½" o 2": se elige sola, ver elegirValvula)
   //   lateral: { material, nominal, tramos? },                  // caño del sector, después de la válvula;
   //       tramos: [nominal de cada tramo] para un caño escalonado (tramo i = el que llega al aspersor i)
   //   manguera: 'pe-12' | null,                                 // manguera del conector inicial a cada aspersor
@@ -209,7 +224,7 @@
     }));
     if (!asps.length) throw new Error('El sector todavía no tiene aspersores: ponelos en el plano con "+ Aspersor" o con "+ Agregar aspersor".');
     const pump = sector.fuente.tipo === 'bomba' ? bomba(sector.fuente.linea, sector.fuente.modelo) : null;
-    const pgv = global.HUNTER.pgv1;
+    const nominalSalida = sector.lateral.tramos?.[0] ?? sector.lateral.nominal;   // el caño que sale de la válvula
 
     // Arranca con el caudal del medio de la tabla y va corrigiendo hasta que no cambia.
     let q = asps.map(a => a.e.caudales[Math.floor(a.e.caudales.length / 2)]);
@@ -234,7 +249,8 @@
 
       const perdAlim = alim ? perdidaCano(total, alim.largo, alim.di, alim.C) * acc : 0;
       const pValvula = pFuente - perdAlim - (alim ? alim.desnivel / MCA_POR_BAR : 0);
-      const perdValv = sector.valvula ? interpolar(pgv.perdida.map(f => f[0] * 1000 / 60), pgv.perdida.map(f => f[1]), total) : { valor: 0, fuera: 0 };
+      const valv = elegirValvula(total, nominalSalida);
+      const perdValv = sector.valvula ? { ...interpolar(valv.tabla.perdida.map(f => f[0] * 1000 / 60), valv.tabla.perdida.map(f => f[1]), total), valv } : { valor: 0, fuera: 0, valv };
       let p = pValvula - perdValv.valor;
       const pSalidaValvula = p;
 
@@ -275,7 +291,7 @@
       if (pump.duda) avisos.push({ nivel: 'aviso', texto: `Ficha de la ${pump.modelo}: ${pump.duda}` });
     }
     if (r.pFuente <= 0) avisos.push({ nivel: 'error', texto: 'No hay presión en la fuente con ese caudal.' });
-    if (sector.valvula && r.perdValv.fuera > 0) avisos.push({ nivel: 'error', texto: `El caudal supera los 150 l/min que admite la válvula PGV de 1".` });
+    if (sector.valvula && r.total > r.perdValv.valv.maxLmin) avisos.push({ nivel: 'error', texto: `El caudal (${fmt(r.total, 0)} l/min) supera los ${fmt(r.perdValv.valv.maxLmin, 0)} l/min que admite la válvula ${r.perdValv.valv.modelo} de ${r.perdValv.valv.medida}.` });
     // Avisos por aspersor, agrupados cuando varios tienen el mismo problema.
     const grupos = new Map();
     const anotar = (clave, nivel, a, armar) => {
@@ -320,7 +336,8 @@
       caudalTotal: r.asp.reduce((t, a) => t + a.caudal, 0),
       fuente: { presion: r.pFuente, bomba: pump ? { ...pump, altura: r.alturaBomba.valor } : null },
       alimentacion: alim ? { cano: alim.nombre, largo: alim.largo, perdida: r.perdAlim, velocidad: velocidad(r.total, alim.di) } : null,
-      presionValvula: r.pValvula, perdidaValvula: r.perdValv.valor, presionSalidaValvula: r.pSalidaValvula,
+      presionValvula: r.pValvula, perdidaValvula: r.perdValv.valor,
+      valvula: sector.valvula ? { medida: r.perdValv.valv.medida, modelo: r.perdValv.valv.modelo, clave: r.perdValv.valv.clave } : null, presionSalidaValvula: r.pSalidaValvula,
       lateral: lat.nombre, tramos: r.tramos, aspersores: r.asp,
       variacion, avisos,
     };
@@ -402,6 +419,6 @@
 
   global.RIEGO = {
     MCA_POR_BAR, VELOCIDAD_MAX, VARIACION_MAX, CANOS, MANGUERAS, ACCESORIOS_MANGUERA_M, MANGUERA_MAX_M, REGULACION, TIPO_AJUSTABLE, TIPO_MP,
-    interpolar, perdidaCano, velocidad, emisores, emisor, bomba, calcularSector, recomendarDiametro, escalonar, tramosPorDiametro, leerNumero, fmt,
+    interpolar, perdidaCano, velocidad, elegirValvula, emisores, emisor, bomba, calcularSector, recomendarDiametro, escalonar, tramosPorDiametro, leerNumero, fmt,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -343,7 +343,10 @@ test('caño escalonado y colector: diámetros que bajan, reducciones, codo del d
   const q3 = clave => pre3.renglones.find(r => r.clave === clave)?.cantidad ?? 0;
   assert.equal(q3('te-pvc-k6-40'), 2);
   assert.equal(q3('codo-pvc-k6-40'), 1);
-  assert.equal(q3('valvula-pgv-1'), 3);
+  // El sector 1 (12 PGP, caño escalonado que sale de 50 mm) lleva PGV de 1½"; los otros dos, de 1"
+  assert.equal(grupos[0].nominal, 50);
+  assert.equal(q3('valvula-pgv-15'), 1, 'con caño de 50 la válvula no puede ser de 1"');
+  assert.equal(q3('valvula-pgv-1'), 2);
   assert.deepEqual(o.sectores.map(s => s.valvulaPos), [{ x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }], 'las válvulas, juntas a la salida de la bomba');
 });
 

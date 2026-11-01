@@ -168,6 +168,109 @@
     for (const z of plano.zonas || []) z.forEach(mover);
   }
 
-  global.GEOMETRIA = { rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
+  // ---------- Sugerir mejoras de cobertura (botón del plano; Darío: que sea una consulta, no un aviso) ----------
+  // Prueba cambios chicos en cada aspersor (girarlo, abrir o cerrar el arco, correrlo) y se queda con los que más
+  // achican lo regado por un solo aspersor o seco. No cambia nada: devuelve sugerencias para que Darío elija.
+  // aspersores: los del plano ({x, y, giro, arco, radio, franja, ...}); limites[k] = { arco: [min, max] } o { arco: null }
+  // (sin cambiar el arco: boquillas fijas y franjas).
+  function sugerirCobertura(terreno, aspersores, zonas, limites = [], paso = 0.35) {
+    const nx = Math.max(1, Math.round(terreno.ancho / paso)), ny = Math.max(1, Math.round(terreno.largo / paso));
+    const px = i => (i + 0.5) * terreno.ancho / nx, py = j => (j + 0.5) * terreno.largo / ny;
+    const conZonas = zonas && zonas.length;
+    const dentro = (x, y) => x >= 0 && y >= 0 && x <= terreno.ancho && y <= terreno.largo && (!conZonas || enZonas(zonas, x, y));
+    const adentro = new Uint8Array(nx * ny);
+    let total = 0;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (dentro(px(i), py(j))) { adentro[j * nx + i] = 1; total++; }
+    if (!total || aspersores.length < 2) return { antes: null, sugerencias: [], faltan: [] };
+    const cuenta = new Uint8Array(nx * ny);
+    const caja = a => {   // celdas que puede tocar un aspersor
+      const r = a.franja ? Math.max(a.radio, a.ancho || 1.5) + 0.5 : a.radio;
+      return { i0: Math.max(0, Math.floor((a.x - r) / terreno.ancho * nx)), i1: Math.min(nx - 1, Math.ceil((a.x + r) / terreno.ancho * nx)),
+        j0: Math.max(0, Math.floor((a.y - r) / terreno.largo * ny)), j1: Math.min(ny - 1, Math.ceil((a.y + r) / terreno.largo * ny)) };
+    };
+    const sumar = (a, signo) => { const c = caja(a); for (let j = c.j0; j <= c.j1; j++) for (let i = c.i0; i <= c.i1; i++) if (adentro[j * nx + i] && riega(a, px(i), py(j))) cuenta[j * nx + i] += signo; };
+    aspersores.forEach(a => sumar(a, 1));
+    // Costo = lo regado por uno solo + 3 veces lo seco (en celdas)
+    const costoCelda = n => n === 0 ? 3 : n === 1 ? 1 : 0;
+    let costoBase = 0, seco = 0, uno = 0;
+    for (let k = 0; k < cuenta.length; k++) if (adentro[k]) { costoBase += costoCelda(cuenta[k]); if (!cuenta[k]) seco++; else if (cuenta[k] === 1) uno++; }
+    const pct = v => v / total * 100;
+    const antes = { seco: pct(seco), uno: pct(uno), bien: pct(total - seco - uno) };
+    // Cambio de costo si el aspersor a pasa a ser b (las demás quedan como están)
+    function delta(a, b) {
+      const ca = caja(a), cb = caja(b);
+      const i0 = Math.min(ca.i0, cb.i0), i1 = Math.max(ca.i1, cb.i1), j0 = Math.min(ca.j0, cb.j0), j1 = Math.max(ca.j1, cb.j1);
+      let d = 0, bienAntes = 0, bienDespues = 0, sx = 0, sy = 0, ganadas = 0;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * nx + i;
+        if (!adentro[k]) continue;
+        const x = px(i), y = py(j), sinA = cuenta[k] - (riega(a, x, y) ? 1 : 0), con = sinA + (riega(b, x, y) ? 1 : 0);
+        const dd = costoCelda(con) - costoCelda(cuenta[k]);
+        if (dd) { d += dd; if (dd < 0) { sx += x; sy += y; ganadas++; } }
+        if (cuenta[k] >= 2) bienAntes++;
+        if (con >= 2) bienDespues++;
+      }
+      return { d, bien: bienDespues - bienAntes, centro: ganadas ? { x: sx / ganadas, y: sy / ganadas } : null };
+    }
+    const sugerencias = [];
+    aspersores.forEach((a, k) => {
+      const lim = limites[k] || {};
+      const pruebas = [];
+      if (!a.franja && a.arco < 360) for (const g of [-30, -20, -10, 10, 20, 30]) pruebas.push({ tipo: 'girar', valor: g, b: { ...a, giro: ((a.giro + g) % 360 + 360) % 360 } });
+      if (!a.franja && lim.arco) for (const d of [-30, -15, 15, 30, 45]) {
+        let arco = Math.round(a.arco + d);
+        if (arco < lim.arco[0] || arco > lim.arco[1] || arco === a.arco) continue;
+        if (arco >= 355) arco = 360;
+        pruebas.push({ tipo: 'arco', valor: arco, b: { ...a, arco } });
+      }
+      for (let r = 0; r < 8; r++) for (const m of [0.3, 0.6, 1]) {
+        const ang = r * 45, x = a.x + m * Math.sin(ang * Math.PI / 180), y = a.y + m * Math.cos(ang * Math.PI / 180);
+        if (dentro(x, y)) pruebas.push({ tipo: 'mover', valor: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, metros: m, rumbo: ang }, b: { ...a, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } });
+      }
+      let mejor = null;
+      for (const p of pruebas) {
+        const r = delta(a, p.b);
+        // Un movimiento tiene que ganar claramente más que un giro (mover un aspersor cuesta más en la obra)
+        const puntaje = r.d + (p.tipo === 'mover' ? p.valor.metros * 2 : 0);
+        if (r.d < 0 && (!mejor || puntaje < mejor.puntaje)) mejor = { ...p, puntaje, ...r };
+      }
+      if (!mejor || -mejor.d / total * 100 < 0.3) return;
+      // El vecino: el otro aspersor más cerca de lo que se gana (para decir "entre el 3 y el 5")
+      const c = mejor.centro;
+      const vecino = c ? aspersores.map((o, n) => ({ n, d: n === k ? Infinity : Math.hypot(o.x - c.x, o.y - c.y) })).sort((p, q) => p.d - q.d)[0].n : null;
+      // Para un círculo completo que conviene correr: de qué lado superpone mucho y de cuál poco
+      let lados = null;
+      if (mejor.tipo === 'mover' && a.arco >= 360 && !a.franja) {
+        const ladoDe = deg => { let mucho = 0, n = 0; const cc = caja(a);
+          for (let j = cc.j0; j <= cc.j1; j++) for (let i = cc.i0; i <= cc.i1; i++) { const kk = j * nx + i, x = px(i), y = py(j);
+            if (!adentro[kk] || !riega(a, x, y) || difAngulo(rumbo(x - a.x, y - a.y), deg) > 90) continue; n++; if (cuenta[kk] >= 3) mucho++; }
+          return n ? mucho / n : 0; };
+        lados = { haciaDonde: ladoDe(mejor.valor.rumbo), contrario: ladoDe(mejor.valor.rumbo + 180) };
+      }
+      sugerencias.push({ k, tipo: mejor.tipo, valor: mejor.valor, ganancia: -mejor.d / total * 100, bien: mejor.bien / total * 100, vecino, lados, punto: c });
+    });
+    sugerencias.sort((p, q) => q.ganancia - p.ganancia);
+    // Partes grandes regadas por uno solo o secas que quedan aunque se acomode: ahí convendría otro aspersor
+    const visto = new Uint8Array(nx * ny), faltan = [];
+    for (let k0 = 0; k0 < cuenta.length; k0++) {
+      if (!adentro[k0] || visto[k0] || cuenta[k0] >= 2) continue;
+      const pila = [k0]; visto[k0] = 1; let n = 0, sx = 0, sy = 0, secas = 0;
+      while (pila.length) {
+        const k = pila.pop(), i = k % nx, j = (k - i) / nx;
+        n++; sx += px(i); sy += py(j); if (!cuenta[k]) secas++;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ii = i + di, jj = j + dj, kk = jj * nx + ii;
+          if (ii < 0 || jj < 0 || ii >= nx || jj >= ny || visto[kk] || !adentro[kk] || cuenta[kk] >= 2) continue;
+          visto[kk] = 1; pila.push(kk);
+        }
+      }
+      const m2 = n * (terreno.ancho / nx) * (terreno.largo / ny);
+      if (m2 >= 2) faltan.push({ x: Math.round(sx / n * 10) / 10, y: Math.round(sy / n * 10) / 10, m2: Math.round(m2 * 10) / 10, seca: secas / n > 0.5 });
+    }
+    faltan.sort((p, q) => q.m2 - p.m2);
+    return { antes, sugerencias: sugerencias.slice(0, 6), faltan: faltan.slice(0, 3) };
+  }
+
+  global.GEOMETRIA = { sugerirCobertura, rumbo, difAngulo, riega, cobertura, distanciasDesdePlano, ubicarSinPosicion, factorDeEscala, escalarPlano,
     largoDeLinea, puntoMasCercano, conexionesAlRamal, subLinea, areaPoligono, dentroDePoligono, enZonas, ladoMasCercano, FUERA, sinUbicar };
 })(typeof window !== 'undefined' ? window : globalThis);

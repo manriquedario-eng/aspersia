@@ -80,6 +80,7 @@
     const desperdicio = 1 + (obra.presupuesto?.desperdicio ?? 10) / 100;
     const canos = new Map();      // material-nominal → { lateral, alimentacion }
     const mangueras = new Map();  // tipo de manguera → { mang, metros }
+    const porMedida = new Map();   // válvulas por medida (1", 1½", 2")
     let valvulas = 0, aspersores = 0, m2 = 0, m2Estimados = false, usaPVC = false, salidas = 0, colector = null;
     const notas = [];
 
@@ -134,7 +135,11 @@
           `Reducción ${esPVC ? 'de PVC ' : ''}de ${tramos[k - 1].nominal} a ${tramos[k].nominal} mm`, 'u', 1);
       pieza('tapon', 'Tapón', tramos.at(-1).nominal, 1);
       if (esPVC || /^pvc/.test(s.alimentacion?.material || '')) usaPVC = true;
-      if (s.valvula) valvulas++;
+      if (s.valvula) {
+        valvulas++;
+        const v = r.valvula || { medida: '1"', modelo: 'PGV-101', clave: '1' };
+        (porMedida.get(v.clave) || porMedida.set(v.clave, { ...v, n: 0 }).get(v.clave)).n++;
+      }
       salidas++;
       colector ||= s.alimentacion;
       if (s.alimentacion && s.alimentacion.largo > 0) {
@@ -159,7 +164,8 @@
       sumar(`codo-${cm}-${colector.nominal}`, 'Materiales', pvc ? `Codo de PVC de ${colector.nominal} mm` : `Codo para caño ${nombre} de ${colector.nominal} mm`, 'u', 1);
     }
     if (valvulas) {
-      sumar('valvula-pgv-1', 'Materiales', 'Electroválvula Hunter PGV-101 de 1"', 'u', valvulas);
+      for (const v of [...porMedida.values()].sort((a, b) => a.clave.localeCompare(b.clave)))
+        sumar(`valvula-pgv-${v.clave}`, 'Materiales', `Electroválvula Hunter ${v.modelo} de ${v.medida}`, 'u', v.n);
       sumar('caja-valvulas', 'Materiales', 'Caja para válvulas con tapa', 'u', 1);
       // Programador residencial Hunter X2 (catálogo 2026): de 4, 6, 8 o 14 estaciones; en 230 V, modelo X2-N01-E.
       const x2 = [4, 6, 8, 14].find(n => n >= valvulas);

@@ -175,3 +175,13 @@ test('números escritos a la argentina: coma decimal y punto de miles', () => {
   for (const [texto, valor] of casos) assert.equal(R.leerNumero(texto), valor, texto);
   assert.ok(Number.isNaN(R.leerNumero('')) && Number.isNaN(R.leerNumero('abc')));
 });
+
+test('válvula PGV según caudal y caño: 1" hasta 150 l/min y caño de 40; 1½" con caño de 50 o más caudal; 2" con 63', () => {
+  const v = (q, d) => RIEGO.elegirValvula(q, d).medida;
+  assert.equal(v(60, 32), '1"');
+  assert.equal(v(140, 40), '1"');
+  assert.equal(v(60, 50), '1½"');
+  assert.equal(v(200, 40), '1½"');
+  assert.equal(v(60, 63), '2"');
+  assert.equal(v(500, 40), '2"');
+});

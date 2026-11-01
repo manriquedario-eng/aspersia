@@ -217,6 +217,19 @@ window.HUNTER = {
     ],
   },
 
+  // Electroválvulas PGV-151 (1½", 40 mm) y PGV-201 (2", 50 mm), en línea: pérdida de carga. Pág. 87.
+  // Caudal: PGV-151 de 5 a 27 m3/h; PGV-201 de 5 a 34 m3/h.
+  pgv15: {
+    pagina: 87,
+    rangoCaudalM3h: [5, 27],
+    perdida: [[4.5,0.2],[5.5,0.2],[6.5,0.2],[8.0,0.2],[9.0,0.2],[11.0,0.3],[13.5,0.3],[18.0,0.4],[22.5,0.6],[27.0,0.8]],
+  },
+  pgv2: {
+    pagina: 87,
+    rangoCaudalM3h: [5, 34],
+    perdida: [[4.5,0.1],[5.5,0.1],[6.5,0.1],[8.0,0.1],[9.0,0.1],[11.0,0.1],[13.5,0.1],[18.0,0.2],[22.5,0.3],[27.0,0.4],[30.5,0.6],[34.0,0.7]],
+  },
+
   // Electroválvula PGV de 1" (25 mm): pérdida de carga. Pág. 89.
   pgv1: {
     pagina: 89,

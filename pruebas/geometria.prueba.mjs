@@ -115,3 +115,17 @@ test('zonas a regar: superficie, adentro/afuera, lado más cercano y cobertura s
   G.escalarPlano(plano, [], 2);
   assert.deepEqual(plano.zonas[0][2], { x: 16, y: 14 });
 });
+
+test('sugerir cobertura: un aspersor de esquina mal girado → sugiere girarlo de vuelta hacia el centro', () => {
+  const t = { ancho: 8, largo: 8 };
+  const esq = (x, y, giro) => ({ x, y, giro, arco: 90, radio: 8.5 });
+  const bien = [esq(0, 0, 45), esq(8, 0, 315), esq(8, 8, 225), esq(0, 8, 135)];
+  assert.equal(G.sugerirCobertura(t, bien, null).sugerencias.length, 0, 'bien regado: nada que sugerir');
+  const mal = [esq(0, 0, 75), ...bien.slice(1)];
+  const r = G.sugerirCobertura(t, mal, null, mal.map(() => ({ arco: null })));
+  assert.ok(r.antes.uno > 0);
+  const s = r.sugerencias[0];
+  assert.equal(s.k, 0);
+  assert.equal(s.tipo, 'girar');
+  assert.equal(s.valor, -30);
+});

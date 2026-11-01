@@ -146,12 +146,9 @@
       if (!t.bombaUbicada) return;   // hasta que se marque la bomba no hay de dónde sacar caños
       const ubicados = s.aspersores.filter(a => a.x != null && a.y != null);
       const diametros = O().diametrosDelSector(ctx.obra, s);
-      if (!O().tieneRamal(s)) {
-        el('polyline', { points: [s.valvulaPos, ...ubicados].map(P).join(' '), stroke: colorSector(k), 'stroke-width': grosor(diametros[0] || 32), ...guiones }, canos);
-        return;
-      }
+      if (!O().tieneRamal(s)) return;   // nunca una manguera a la bomba: hasta que se dibuje el caño, no hay conexiones
       const linea = [s.valvulaPos, ...s.ramal], largo = G.largoDeLinea(linea);
-      el('polyline', { points: linea.map(P).join(' '), 'stroke-width': 16 * escala, 'data-cano': k, class: 'cano-tocar' }, canos);
+      el('polyline', { points: linea.map(P).join(' '), 'stroke-width': 30 * escala, 'data-cano': k, class: 'cano-tocar' }, canos);
       const conexiones = G.conexionesAlRamal(s.valvulaPos, s.ramal, ubicados);
       // Tramos del mismo diámetro: desde la válvula (o el último cambio) hasta la conexión donde cambia
       let desde = 0, recorrido = 0;
@@ -165,7 +162,7 @@
       for (const tr of cortes) {
         const pts = G.subLinea(linea, tr.desde, tr.hasta);
         if (pts.length < 2) continue;
-        el('polyline', { points: pts.map(P).join(' '), stroke: colorSector(k), 'stroke-width': grosor(tr.d), ...guiones, class: 'ramal' }, canos);
+        el('polyline', { points: pts.map(P).join(' '), stroke: colorSector(k), 'stroke-width': grosor(tr.d), ...guiones, class: 'ramal', 'data-cano': k }, canos);   // tocar el caño (también justo sobre la línea) abre su medida
         const medio = G.subLinea(linea, (tr.desde + tr.hasta) / 2, (tr.desde + tr.hasta) / 2)[0] || pts[0];   // etiqueta en la mitad del tramo
         const txt = el('text', { x: medio.x, y: Y(medio.y) - 6 * escala, 'font-size': 10 * escala, 'stroke-width': 3 * escala, class: 'texto-diametro' }, canos);
         txt.textContent = `${tr.d} mm`;
@@ -247,6 +244,10 @@
       const txt = el('text', { x: punto(giro).x, y: Y(punto(giro).y) - rf * 1.4, 'font-size': rf * 1.3, 'stroke-width': 3 * escala, class: 'texto-diametro' }, svg);
       txt.textContent = `${Math.round(arco)}°`;
     }
+    if (consulta?.marca) {
+      el('circle', { cx: consulta.marca.x, cy: Y(consulta.marca.y), r: Math.max(0.6, 14 * escala), class: 'marca-sugerida', 'stroke-width': 3 * escala }, svg);
+      el('circle', { cx: consulta.marca.x, cy: Y(consulta.marca.y), r: 3 * escala, class: 'marca-sugerida-centro' }, svg);
+    }
     if (ctx.rosa) ctx.rosa.style.transform = `rotate(${t.norte || 0}deg)`;
     pintarDatos(cob, t.verSol);
   }
@@ -257,6 +258,7 @@
     let html = '';
     if (cob) html = `<span class="dato seco">${pct(cob.seco)} seco</span><span class="dato uno">${pct(cob.uno)} un solo aspersor</span><span class="dato bien">${pct(cob.bien)} bien cubierto</span>`;
     if (sol) html = `<p class="ayuda">El sol pasa por el norte: el lado de ${S.ladoDelPlano(t.norte || 0)} del plano recibe más sol y el de ${S.ladoDelPlano((t.norte || 0) + 180)}, menos. Es orientativo: lo que queda justo al sur de una casa, un muro o un árbol tiene más sombra.</p>`;
+    if (!sol && ctx.aspersores().length >= 2) html += pintarConsulta();
     ctx.estadisticas.innerHTML = html;
     const piezas = '▲ fuente · ■ válvula · punteado: caño · línea fina: manguera · □ codo';
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol ? `<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ${piezas}`
@@ -301,6 +303,9 @@
     } else if (marcando?.tipo === 'ramal') {
       texto = `Tocá por dónde va el caño (${n})`;
       botones = [b('data-ramal', 'deshacer', 'Deshacer', '', !n), b('data-ramal', 'listo', 'Listo', 'activo', !n), b('data-ramal', 'cancelar', 'Cancelar')];
+    } else if (marcando?.tipo === 'aspersores' && marcando.copia) {
+      texto = `Tocá dónde va cada copia (${marcando.puestos})`;
+      botones = [b('data-modo-accion', 'cancelar', 'Listo', 'activo')];
     } else if (marcando?.tipo === 'aspersores') {
       texto = 'Tocá dónde va el aspersor';
       botones = [b('data-modo-accion', 'cancelar', 'Cancelar')];
@@ -342,6 +347,12 @@
         <p class="ayuda">Tocá en el plano cada esquina de la parte que se riega (la tierra o el pasto), una después de la otra, dando la vuelta. Arrastrar sigue moviendo la vista.</p>
         <p class="ayuda"><b>${n}</b> ${n === 1 ? 'esquina marcada' : 'esquinas marcadas'}${n < 3 ? ' (hacen falta por lo menos 3)' : ''}.</p>
         ${botones([['zona-listo', 'Listo', 'activo', n < 3], ['deshacer', 'Deshacer', '', !n], ['cancelar', 'Cancelar']])}`;
+      return;
+    }
+    if (marcando?.tipo === 'aspersores' && marcando.copia) {
+      caja.innerHTML = `<p class="sel-titulo">Duplicar aspersor en ${nombre(marcando.s)}</p>
+        <p class="ayuda">Cada toque en el plano pone una copia igual (misma boquilla, arco y dirección). Van ${marcando.puestos}. Cuando termines, Listo.</p>
+        ${botones([['cancelar', 'Listo', 'activo']])}`;
       return;
     }
     if (marcando?.tipo === 'aspersores') {
@@ -403,7 +414,7 @@
     }
     const obj = objeto(seleccion);
     let titulo = ctx.obra.fuente.tipo === 'bomba' ? 'Bomba y válvulas' : 'Canilla y válvulas';
-    let giro = '';
+    let giro = '', arriba = '';
     if (seleccion.tipo === 'fuente') {
       // Un renglón por sector: su válvula está a la salida de la bomba y de ahí sale su caño
       const filas = ctx.obra.sectores.map((s, k) => {
@@ -434,14 +445,25 @@
         : `${nombreSector} · aspersor ${seleccion.i + 1}: arco de ${obj.arco}° no válido para esta boquilla (elegí otro)`;
       const manguera = O().tieneRamal(ctx.obra.sectores[seleccion.s])
         ? `<p class="ayuda ${obj.manguera > 6 ? 'aviso-arco' : ''}">Manguera hasta el caño: <b>${fmt1(obj.manguera)} m</b>${obj.manguera > 6 ? ' (más de 6 m: acercalo al caño o llevá el caño más cerca)' : ''}.</p>` : '';
+      const tb = ctx.tobera, n = tb ? tb.normalizar(obj) : null;
+      const sel = (campo, lista, valor) => `<select data-asp="${campo}">${lista.map(([v, t]) => `<option value="${String(v).replace(/"/g, '&quot;')}" ${String(v) === String(valor ?? '') ? 'selected' : ''}>${String(t).replace(/[<>&]/g, '')}</option>`).join('')}</select>`;
+      const toberas = tb ? `<div class="campos dos">
+          <label>Aspersor ${sel('tipo', tb.tipos.map(t => [t, t]), obj.tipo)}</label>
+          <label>Boquilla ${sel('boquilla', tb.boquillas(obj.tipo), obj.boquilla)}</label>
+          ${n.conCuerpo ? `<label>Cuerpo Pro-Spray ${sel('regulador', [['', 'Sin regulador'], ['PRS30', 'PRS30 · 2,1 bar'], ['PRS40', 'PRS40 · 2,8 bar']], obj.regulador || '')}</label>` : ''}
+          ${ctx.obra.sectores.length > 1 ? `<label>Sector ${sel('sector', ctx.obra.sectores.map((s, k) => [k, nombre(k)]), seleccion.s)}</label>` : ''}
+        </div>` : '';
+      const sinCano = !O().tieneRamal(ctx.obra.sectores[seleccion.s]) && plano().bombaUbicada
+        ? `<p class="ayuda aviso-arco">${nombre(seleccion.s).replace(/[<>&]/g, '')}: falta dibujar el caño. La manguera de cada aspersor va al punto más cercano del caño.</p>` : '';
+      arriba = toberas + sinCano;
       giro = manguera + controlArco(obj, a) + (a && a.arco >= 360 && !a.franja ? '<p class="ayuda">Círculo completo: no hace falta girarlo.</p>' : `
         <label>Hacia dónde apunta <span class="unidad">° (0 = arriba, 90 = derecha, 180 = abajo, 270 = izquierda)</span><input type="number" inputmode="numeric" step="5" data-sel="giro" value="${Math.round(obj.giro || 0)}"></label>
         <div class="giros"><button type="button" class="chico" data-girar="-45">⟲ 45°</button><button type="button" class="chico" data-girar="-15">⟲ 15°</button>
         <button type="button" class="chico" data-girar="15">15° ⟳</button><button type="button" class="chico" data-girar="45">45° ⟳</button></div>`)
-        + botones([['quitar-asp', 'Quitar aspersor', 'peligro']]);
+        + botones([['duplicar-asp', 'Duplicar', 'activo'], ['quitar-asp', 'Quitar aspersor', 'peligro']]);
     }
     // La válvula no se ubica a mano: va a la salida de la bomba
-    caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>
+    caja.innerHTML = `<p class="sel-titulo">${titulo.replace(/[<>&]/g, '')}</p>${arriba}
       <div class="campos dos" ${seleccion.tipo === 'valvula' ? 'hidden' : ''}>
         <label>X <span class="unidad">m desde la izquierda</span><input type="text" inputmode="decimal" autocomplete="off" step="0.1" data-sel="x" value="${obj.x}"></label>
         <label>Y <span class="unidad">m desde abajo</span><input type="text" inputmode="decimal" autocomplete="off" step="0.1" data-sel="y" value="${obj.y}"></label>
@@ -479,9 +501,74 @@
 
   const mismaPieza = (a, b) => !!a && !!b && a.tipo === b.tipo && a.s === b.s && a.i === b.i;
 
+  // ---------- Sugerir mejoras de cobertura: una consulta (botón), no un aviso ----------
+  let consulta = null, consultaAplicada = false;
+  const DIRECCIONES = ['arriba', 'arriba a la derecha', 'a la derecha', 'abajo a la derecha', 'abajo', 'abajo a la izquierda', 'a la izquierda', 'arriba a la izquierda'];
+  const direccion = r => DIRECCIONES[Math.round((((r % 360) + 360) % 360) / 45) % 8];
+  const limpio = t => String(t).replace(/[<>&]/g, '');
+  function armarConsulta() {
+    const lista = ctx.aspersores();
+    const limites = lista.map(p => {
+      const a = ctx.obra.sectores[p.s].aspersores[p.i];
+      if (p.franja || !O().arcoLibre(a)) return { arco: null };
+      return { arco: O().esMP(a) ? (a.boquilla === 'MP3500' ? [90, 210] : [90, 270]) : [25, 360] };
+    });
+    const r = G.sugerirCobertura(plano(), lista, plano().zonas, limites);
+    const quien = k => `el aspersor ${lista[k].i + 1} de ${limpio(nombre(lista[k].s))}`;
+    const items = r.sugerencias.map(s => {
+      const p = lista[s.k], vec = s.vecino != null ? ` entre él y ${quien(s.vecino)}` : '';
+      const mejora = s.bien >= 0.1 ? `Bien cubierto: +${s.bien.toFixed(1).replace('.', ',')} %.` : 'Queda menos parte seca.';
+      let texto;
+      if (s.tipo === 'girar') texto = `Girá ${quien(s.k)} ${Math.abs(s.valor)}° ${s.valor > 0 ? 'a la derecha (como el reloj)' : 'a la izquierda'}: cubre mejor la parte${vec} que hoy riega uno solo. ${mejora}`;
+      else if (s.tipo === 'arco') texto = `${s.valor > p.arco ? 'Abrí' : 'Cerrá'} el arco de ${quien(s.k)} de ${Math.round(p.arco)}° a ${s.valor}°: mejora la parte${vec}. ${mejora}`;
+      else if (s.lados && s.lados.contrario > s.lados.haciaDonde)
+        texto = `${quien(s.k).replace(/^el/, 'El')} (círculo completo) superpone mucho ${direccion(s.valor.rumbo + 180)} y poco ${direccion(s.valor.rumbo)}: corrélo ${String(s.valor.metros).replace('.', ',')} m ${direccion(s.valor.rumbo)}. ${mejora}`;
+      else texto = `Corré ${quien(s.k)} ${String(s.valor.metros).replace('.', ',')} m ${direccion(s.valor.rumbo)}: cubre mejor la parte${vec}. ${mejora}`;
+      return { texto, s: p.s, i: p.i, tipo: s.tipo, valor: s.valor, punto: s.punto };
+    });
+    const faltan = r.faltan.map(f => ({ ...f, texto: f.m2 > 25 ? `Queda una parte grande (${String(f.m2).replace('.', ',')} m²) ${f.seca ? 'seca' : 'regada por un solo aspersor'}: faltan aspersores en esa parte.` : `Queda una parte de ${String(f.m2).replace('.', ',')} m² ${f.seca ? 'seca' : 'regada por un solo aspersor'}. Si con los cambios de arriba no se cubre, convendría agregar un aspersor ahí.` }));
+    return { antes: r.antes, items, faltan, marca: null };
+  }
+  function pintarConsulta() {
+    if (!consulta) return `<div class="consulta"><button type="button" class="chico" data-sugerir="calcular">Sugerir mejoras de cobertura</button></div>`;
+    if (consulta.hecho) return `<div class="consulta"><p class="ayuda">Aplicado: ${consulta.hecho}</p><button type="button" class="chico" data-sugerir="calcular">Sugerir de nuevo</button></div>`;
+    const ver = (tipo, n) => `<button type="button" class="chico" data-sugerir="${tipo}" data-n="${n}">Ver</button>`;
+    const filas = [
+      ...consulta.items.map((x, n) => `<li><span>${x.texto}</span><span class="acciones-sug">${ver('ver', n)}<button type="button" class="chico activo" data-sugerir="aplicar" data-n="${n}">Aplicar</button></span></li>`),
+      ...consulta.faltan.map((f, n) => `<li><span>${f.texto}</span><span class="acciones-sug">${ver('ver-falta', n)}</span></li>`),
+    ];
+    const a = consulta.antes;
+    return `<div class="consulta"><p class="sel-titulo">Sugerencias para mejorar la cobertura</p>
+      ${a ? `<p class="ayuda">Hoy: ${a.bien.toFixed(0)} % bien cubierto, ${a.uno.toFixed(0)} % con un solo aspersor, ${a.seco.toFixed(0)} % seco (dentro de la zona a regar). Son ideas: aplicá las que te sirvan.</p>` : ''}
+      ${filas.length ? `<ul class="sugerencias">${filas.join('')}</ul>` : '<p class="ayuda">No encontré cambios chicos que mejoren la cobertura: así como está, está bien.</p>'}
+      <button type="button" class="chico" data-sugerir="cerrar">Cerrar</button></div>`;
+  }
+  function accionConsulta(b) {
+    const accion = b.dataset.sugerir, n = Number(b.dataset.n);
+    if (accion === 'calcular') { b.textContent = 'Pensando…'; b.disabled = true; setTimeout(() => { consulta = armarConsulta(); pintar(); }, 30); return; }
+    if (accion === 'cerrar') { consulta = null; return pintar(); }
+    if (accion === 'ver-falta') { consulta.marca = consulta.faltan[n]; seleccion = null; return pintar(); }
+    const x = consulta.items[n];
+    if (accion === 'ver') { consulta.marca = x.punto; seleccion = { tipo: 'asp', s: x.s, i: x.i }; return pintar(); }
+    if (accion === 'aplicar') {
+      const obj = ctx.obra.sectores[x.s].aspersores[x.i];
+      avisoArco = '';
+      if (x.tipo === 'girar') obj.giro = (((obj.giro || 0) + x.valor) % 360 + 360) % 360;
+      if (x.tipo === 'arco') { try { avisoArco = O().ponerArco(obj, x.valor) || ''; } catch (err) { avisoArco = err.message; } }
+      if (x.tipo === 'mover') { obj.x = x.valor.x; obj.y = x.valor.y; }
+      seleccion = { tipo: 'asp', s: x.s, i: x.i };
+      consultaAplicada = true;
+      consulta = { hecho: x.texto.replace(/ (Bien cubierto|Queda menos).*$/, '') };
+      avisarCambio(true);
+      consultaAplicada = false;
+      return pintar();
+    }
+  }
+
   // Avisa a la pantalla que algo cambió (recalcula y guarda). Con ramal, los aspersores se reordenan según el caño:
   // la selección sigue al mismo aspersor aunque cambie su número.
   function avisarCambio(distancias) {
+    if (!consultaAplicada) consulta = null;
     const obj = seleccion?.tipo === 'asp' ? objeto(seleccion) : null;
     ctx.alCambiar(distancias);
     if (obj) {
@@ -505,7 +592,7 @@
       if (accion === 'deshacer') { marcando.puntos.pop(); return pintar(); }
       if (accion === 'listo' && marcando.puntos.length) ctx.obra.sectores[k].ramal = marcando.puntos.map(p => ({ x: r2(p.x), y: r2(p.y) }));
       marcando = null;
-      seleccion = { tipo: 'fuente' };
+      seleccion = accion === 'listo' && O().tieneRamal(ctx.obra.sectores[k]) ? { tipo: 'cano', s: k } : { tipo: 'fuente' };
       ultimoSector = k;
       avisarCambio(true);
       return pintar();
@@ -530,26 +617,31 @@
   }
   // "+ Aspersor": un toque pone UN aspersor en el sector elegido (con la misma tobera que el último) y lo deja elegido,
   // para acomodarlo, girarlo y abrirle el arco enseguida. Para el siguiente, otra vez "+ Aspersor".
-  function agregarAspersores(k) {
+  function agregarAspersores(k, copia) {
     seleccion = null;
     if (k == null) { marcando = { tipo: 'elegir-sector', n: 0, puntos: [] }; return pintar(); }
     ultimoSector = k;
-    marcando = { tipo: 'aspersores', s: k, n: Infinity, etiquetas: [], puntos: [], puestos: 0,
+    marcando = { tipo: 'aspersores', s: k, n: Infinity, etiquetas: [], puntos: [], puestos: 0, copia,
       alMarcar: () => {
         const s = ctx.obra.sectores[k], p = marcando.puntos.pop();
         const ubicados = s.aspersores.filter(a => a.x != null);
-        const base = ubicados.at(-1) || s.aspersores.at(-1) || global.ALMACEN.aspersorInicial(0);
+        const base = copia || ubicados.at(-1) || s.aspersores.at(-1) || global.ALMACEN.aspersorInicial(0);
         const anterior = ubicados.at(-1) || s.valvulaPos;
         const { x, y, ...tobera } = base;
         // Apunta hacia el centro de la zona más cercana (en el borde, así riega hacia adentro y no a la vereda)
         const zonas = plano().zonas || [];
         const zona = zonas.find(z => G.dentroDePoligono(z, p.x, p.y)) || (zonas.length ? zonas[G.ladoMasCercano(zonas, p).zona] : null);
         const centro = zona && { x: zona.reduce((t, q) => t + q.x, 0) / zona.length, y: zona.reduce((t, q) => t + q.y, 0) / zona.length };
-        const giro = centro ? Math.round(G.rumbo(centro.x - p.x, centro.y - p.y) / 5) * 5 % 360 : (base.giro ?? 0);
+        const giro = copia ? (copia.giro ?? 0) : centro ? Math.round(G.rumbo(centro.x - p.x, centro.y - p.y) / 5) * 5 % 360 : (base.giro ?? 0);
         s.aspersores.push({ ...tobera, x: r1(p.x), y: r1(p.y), giro,
           distancia: r1(Math.hypot(p.x - anterior.x, p.y - anterior.y)) || 1, manguera: base.manguera ?? 1 });
-        marcando = null;
         avisoArco = '';
+        if (copia) {   // Duplicar: queda listo para la próxima copia
+          marcando.puestos++;
+          avisarCambio(true);
+          return pintar();
+        }
+        marcando = null;
         seleccion = { tipo: 'asp', s: k, i: s.aspersores.length - 1 };
         avisarCambio(true);   // con caño dibujado se reordena: la selección sigue al mismo aspersor
         pintar();
@@ -832,6 +924,24 @@
       // El arco escrito se toma al terminar de escribirlo (si no, al escribir "45" pasaría por 4°).
       ctx.seleccion.addEventListener('change', ev => {
         if (ev.target.matches('[data-arco-libre]') && seleccion?.tipo === 'asp') elegirArco(global.RIEGO.leerNumero(ev.target.value));
+        const campo = ev.target.dataset.asp;
+        if (campo && seleccion?.tipo === 'asp') {
+          const obj = objeto(seleccion);
+          if (campo === 'sector') {
+            // Pasa el aspersor a otro sector (su manguera va al caño de ese sector)
+            const k = Number(ev.target.value), de = ctx.obra.sectores[seleccion.s].aspersores;
+            de.splice(de.indexOf(obj), 1);
+            ctx.obra.sectores[k].aspersores.push(obj);
+            seleccion = { tipo: 'asp', s: k, i: ctx.obra.sectores[k].aspersores.length - 1 };
+            ultimoSector = k;
+          } else {
+            obj[campo] = ev.target.value;
+            ctx.tobera.normalizar(obj);
+          }
+          avisoArco = '';
+          avisarCambio(true);
+          pintar();
+        }
       });
       const alTocarBoton = ev => {
         const arco = ev.target.closest('[data-arco]');
@@ -866,6 +976,7 @@
             if (!modo.dataset.confirmar) { modo.dataset.confirmar = '1'; modo.textContent = 'Tocá de nuevo para borrar'; return; }
             delete ctx.obra.sectores[seleccion.s].ramal; seleccion = null; avisarCambio(true); return pintar();
           }
+          if (accion === 'duplicar-asp') return agregarAspersores(seleccion.s, { ...objeto(seleccion) });
           if (accion === 'quitar-zona' || accion === 'quitar-asp') {
             if (!modo.dataset.confirmar) { modo.dataset.confirmar = '1'; modo.textContent = 'Tocá de nuevo para quitar'; return; }
             if (accion === 'quitar-zona') { plano().zonas.splice(seleccion.s, 1); avisarCambio(false); }
@@ -883,6 +994,7 @@
         pintar();
       };
       ctx.seleccion.addEventListener('click', alTocarBoton);
+      ctx.estadisticas.addEventListener('click', ev => { const b = ev.target.closest('[data-sugerir]'); if (b) accionConsulta(b); });
       ctx.flotante?.addEventListener('click', alTocarBoton);
       // En la barra flotante, Enter en la medida aplica la escala
       ctx.flotante?.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches('[data-medida-real]')) accionModo('medir-aplicar')(); });
