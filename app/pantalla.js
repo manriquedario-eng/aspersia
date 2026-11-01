@@ -842,6 +842,7 @@
     $('pre-iva').checked = !!p.iva;
     $('pre-iva').disabled = fijo;
     $('agregar-renglon').hidden = fijo;
+    $('agregar-trabajo').hidden = fijo || obra.tipo !== 'mantenimiento';
     const mant = obra.tipo === 'mantenimiento';
     $('agregar-renglon').textContent = mant ? '+ Agregar material' : '+ Agregar renglón propio';
     $('pre-horas-caja').hidden = !mant;
@@ -954,6 +955,12 @@
     obra.horas = Math.max(0, decimal(ev.target.value));
     if (obra.presupuesto.cambios['mo-hora']) delete obra.presupuesto.cambios['mo-hora'].cantidad;
     guardar(); pintarPresupuesto();
+  });
+  // Mantenimiento: otro renglón de horas con su detalle (por ejemplo, "Opción A: reparar el caño por afuera")
+  $('agregar-trabajo').addEventListener('click', () => {
+    obra.presupuesto.propios.push({ id: A.nuevoId(), rubro: 'Mano de obra', descripcion: '', unidad: 'h', cantidad: 1, precio: datos.precios['mo-hora'] || 0 });
+    guardar(); pintarPresupuesto();
+    [...document.querySelectorAll('#renglones .renglon[data-propio]')].at(-1)?.querySelector('input').focus();
   });
   $('agregar-renglon').addEventListener('click', () => {
     // En mantenimiento, cada material: detalle e importe (cantidad 1)
