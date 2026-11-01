@@ -449,6 +449,8 @@
   }
   $('obra-trabajo').addEventListener('input', ev => { obra.trabajo = ev.target.value; guardar(); });
   // ---------- Actualizar la app sin cerrarla: busca la versión nueva, la baja entera y recarga ----------
+  // Si el navegador ya bajó e instaló la versión nueva por su cuenta después de abrir la app, la pantalla sigue con la vieja: hay que recargar.
+  const swAlAbrir = navigator.serviceWorker?.controller || null;
   $('actualizar-app').addEventListener('click', async ev => {
     const b = ev.target;
     const aviso = t => { b.textContent = t; };
@@ -459,6 +461,8 @@
       if (!reg) { location.reload(); return; }
       await reg.update();
       const nuevo = reg.installing || reg.waiting;
+      const yaCambio = swAlAbrir && navigator.serviceWorker.controller && navigator.serviceWorker.controller !== swAlAbrir;
+      if (!nuevo && yaCambio) { aviso('Abriendo la versión nueva…'); location.reload(); return; }
       if (!nuevo) { aviso('Ya tenés la última versión ✓'); setTimeout(() => { b.disabled = false; aviso('Buscar actualización'); }, 3000); return; }
       aviso('Bajando la versión nueva…');
       navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
