@@ -176,7 +176,9 @@
       for (const tr of cortes) {
         const pts = G.subLinea(linea, tr.desde, tr.hasta);
         if (pts.length < 2) continue;
-        el('polyline', { points: pts.map(P).join(' '), stroke: '#3F4652', 'stroke-width': grosor(tr.d) + 2 * escala, fill: 'none', 'stroke-linejoin': 'round', class: 'ramal', 'data-cano': k }, canos);
+        // Caño blanco como el PVC, con borde negro: no se confunde con los abanicos ni con los colores de los sectores
+        el('polyline', { points: pts.map(P).join(' '), stroke: '#111', 'stroke-width': grosor(tr.d) + 4 * escala, fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'ramal', 'data-cano': k }, canos);
+        el('polyline', { points: pts.map(P).join(' '), stroke: '#fff', 'stroke-width': grosor(tr.d) + 1.5 * escala, fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'ramal', 'data-cano': k }, canos);
         el('polyline', { points: pts.map(P).join(' '), stroke: colorSector(k), 'stroke-width': 1.2 * escala, fill: 'none', class: 'ramal', 'data-cano': k }, canos);   // tocar el caño (también justo sobre la línea) abre su medida
         const medio = G.subLinea(linea, (tr.desde + tr.hasta) / 2, (tr.desde + tr.hasta) / 2)[0] || pts[0];   // etiqueta en la mitad del tramo
         const txt = el('text', { x: medio.x, y: Y(medio.y) - 6 * escala, 'font-size': 10 * escala, 'stroke-width': 3 * escala, class: 'texto-diametro' }, canos);
@@ -280,7 +282,7 @@
     if (sol) html = `<p class="ayuda">El sol pasa por el norte: el lado de ${S.ladoDelPlano(t.norte || 0)} del plano recibe más sol y el de ${S.ladoDelPlano((t.norte || 0) + 180)}, menos. Es orientativo: lo que queda justo al sur de una casa, un muro o un árbol tiene más sombra.</p>`;
     if (!sol && ctx.aspersores().length >= 2) html += pintarConsulta();
     ctx.estadisticas.innerHTML = html;
-    const piezas = '▲ fuente · ■ válvula · línea gris: caño · línea fina: manguera · fucsia: el aspersor elegido · □ codo';
+    const piezas = '▲ fuente · ■ válvula · línea blanca con borde negro: caño · línea fina: manguera · fucsia: el aspersor elegido · □ codo';
     if (ctx.leyenda) ctx.leyenda.innerHTML = sol ? `<i class="sol"></i> más sol (norte) <i class="menos-sol"></i> menos sol (sur) · ${piezas}`
       : t.verCobertura ? `<i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ${piezas}` : piezas;
     pintarAcciones();

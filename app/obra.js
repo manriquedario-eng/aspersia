@@ -254,20 +254,42 @@
     const area = zonas.reduce((s, z) => s + G.areaPoligono(z), 0);
     const emisor = a => { try { return Rg.emisor(idEmisor(a)); } catch { return null; } };
     const medio = v => v[Math.floor(v.length / 2)];
-    // Boquillas candidatas, con el alcance y el caudal del medio de su tabla
+    // Alcance con la presión que le va a llegar (no el del medio de la tabla: con poca presión tira menos).
+    // Canilla: su presión menos ~0,5 bar de caños y válvula; bomba: ~2,5 bar en la boquilla.
+    const pLlega = obra.fuente.tipo === 'bomba' ? 2.5 : Math.max(1, (obra.fuente.bar || 3) - 0.5);
+    const alcanceA = e => e.presiones ? Rg.interpolar(e.presiones, e.radios, pLlega).valor : medio(e.radios);
+    // Boquillas candidatas, con el alcance a esa presión
     const candidatas = [];
-    for (const [tipo, filtro] of [['Boquilla Pro ajustable', b => /HE$/.test(b)], ['Turbina PGP Ultra', () => true]]) {
+    for (const [tipo, filtro] of [['Boquilla Pro ajustable', b => /HE$/.test(b)], [Rg.TIPO_MP, b => /^MP(1000|2000|3000|3500)$/.test(b)], ['Turbina PGP Ultra', () => true]]) {
       const boqs = [...new Set(Rg.emisores().filter(e => e.tipo === tipo).map(e => e.boquilla))].filter(filtro);
       for (const boquilla of boqs) {
         const e = emisor({ tipo, boquilla, arco: 180 });
-        if (e) candidatas.push({ tipo, boquilla, radio: medio(e.radios) });
+        // Arcos que admite: MP de 90° a 270° o 360°; MP3500 de 90° a 210° (sin círculo); las demás, cualquiera
+        const arcos = tipo !== Rg.TIPO_MP ? { min: 1, max: 360, circulo: true } : boquilla === 'MP3500' ? { min: 90, max: 210, circulo: false } : { min: 90, max: 270, circulo: true };
+        if (e) candidatas.push({ tipo, boquilla, radio: alcanceA(e), arcos });
       }
     }
+    // Lo que da la fuente por sector (hace falta para comparar costos)
+    let capacidad = 40;   // canilla: unos 40 l/min (no se conoce el caudal de la red)
+    if (obra.fuente.tipo === 'bomba') {
+      try {
+        const b = Rg.bomba(obra.fuente.linea, obra.fuente.modelo), altura = 30 + (obra.fuente.aspiracion || 0);   // ~3 bar a la salida
+        const ok = b.caudales.filter((q, i) => b.alturas[i] >= altura);
+        capacidad = ok.length ? Math.max(...ok) : b.caudales[0];
+      } catch { /* bomba desconocida: queda el valor de canilla */ }
+    }
+    capacidad *= 0.9;
     const adentro = (p, d = 0.05) => G.enZonas(zonas, p.x, p.y) || zonas.some(z => G.puntoMasCercano([...z, z[0]], p).distancia <= d);
-    function armar(c) {
-      const sep = c.radio * 0.95;   // cabeza a cabeza, con un poco de margen
+    function armar(c, factor) {
+      const sep = c.radio * factor;   // 0,95 = cabeza a cabeza; más abierto = menos aspersores
       const asps = [];
-      const poner = (x, y, giro, arco) => asps.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, giro: Math.round(giro) % 360, arco: Math.round(arco), radio: c.radio });
+      const poner = (x, y, giro, arco) => {
+        // Arco dentro de lo que admite la boquilla (una MP no baja de 90°)
+        arco = Math.round(arco);
+        if (arco >= 360 && !c.arcos.circulo) return;
+        if (arco < 360) arco = Math.min(c.arcos.max, Math.max(c.arcos.min, arco));
+        asps.push({ x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, giro: Math.round(giro) % 360, arco, radio: c.radio });
+      };
       for (const z of zonas) z.forEach((v, i) => {
         const al = G.alinearConBorde(zonas, v, 0.01);
         if (al) poner(v.x, v.y, al.giro, al.arco);
@@ -296,27 +318,22 @@
         const x = a.x - a.radio + (u + 0.5) * a.radio / 6, y = a.y - a.radio + (v + 0.5) * a.radio / 6;
         if (G.riega(a, x, y) && !adentro({ x, y }, 0)) afuera += (a.radio / 6) ** 2;
       }
-      return { c, asps, cob, afuera };
+      // Costo aproximado (Darío: equilibrio entre cobertura y costo): cada aspersor 1; cada sector (válvula, estación
+      // del programador y su caño) como 4 aspersores
+      const caudal = asps.reduce((s, a) => { const e = emisor({ tipo: c.tipo, boquilla: c.boquilla, arco: a.arco }); return s + (e ? medio(e.caudales) : 10); }, 0);
+      const sectores = Math.max(1, Math.ceil(caudal / capacidad));
+      return { c, asps, cob, afuera, sectores, costo: asps.length + 4 * sectores };
     }
-    const opciones = candidatas.map(armar).filter(o => o.asps.length);
-    // La mejor: buena cobertura (90 % o más bien cubierto) mojando poco afuera, con la menor cantidad de aspersores
-    const sirve = o => o.cob.bien >= 90 && o.afuera <= area * 0.05;   // casi nada afuera (Darío: no romper la línea del terreno)
-    const elegida = opciones.filter(sirve).sort((p, q) => p.asps.length - q.asps.length || p.afuera - q.afuera)[0]
+    const opciones = candidatas.flatMap(c => [0.95, 1.1, 1.25].map(f => armar(c, f))).filter(o => o.asps.length);
+    // La mejor: la más barata que riega bien (80 % o más con dos aspersores, casi nada seco) sin mojar afuera
+    const sirve = o => o.cob.bien >= 80 && o.cob.seco <= 3 && o.afuera <= area * 0.05;   // casi nada afuera (Darío: no romper la línea del terreno)
+    const elegida = opciones.filter(sirve).sort((p, q) => p.costo - q.costo || q.cob.bien - p.cob.bien)[0]
       || opciones.sort((p, q) => (q.cob.bien - q.afuera / area * 100) - (p.cob.bien - p.afuera / area * 100))[0];
     if (!elegida) throw new Error('No se pudo armar una propuesta: dibujá primero la zona a regar.');
     const { c } = elegida;
 
     // Caudal de cada aspersor y lo que da la fuente por sector
     const caudalDe = a => { const e = emisor({ tipo: c.tipo, boquilla: c.boquilla, arco: a.arco }); return e ? medio(e.caudales) : 10; };
-    let capacidad = 40;   // canilla: unos 40 l/min (no se conoce el caudal de la red)
-    if (obra.fuente.tipo === 'bomba') {
-      try {
-        const b = Rg.bomba(obra.fuente.linea, obra.fuente.modelo), altura = 30 + (obra.fuente.aspiracion || 0);   // ~3 bar a la salida
-        const ok = b.caudales.filter((q, i) => b.alturas[i] >= altura);
-        capacidad = ok.length ? Math.max(...ok) : b.caudales[0];
-      } catch { /* bomba desconocida: queda el valor de canilla */ }
-    }
-    capacidad *= 0.9;
     // Sectores en gajos que salen desde la bomba (así cada caño va derecho a su sector sin cruzar los otros):
     // los aspersores se ordenan por la dirección en que se ven desde la bomba y se corta cuando se pasa del caudal
     const f = t.fuente || { x: 0, y: 0 };

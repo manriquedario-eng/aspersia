@@ -406,7 +406,7 @@ test('medida por tramo del caño: del 1 al 2 de 50 y del 2 al 3 de 40 → metros
   assert.equal(q('valvula-pgv-15'), 1, 'sale con caño de 50: válvula de 1½"');
 });
 
-test('sugerir riego completo: plano aparte, la obra original no cambia, buena cobertura sin mojar afuera y sectores según la fuente', () => {
+test('sugerir riego completo: plano aparte, la obra original no cambia, buena cobertura al menor costo, sin mojar afuera y sectores según la fuente', () => {
   const { o } = obraDePrueba();
   o.fuente = { tipo: 'presion', bar: 3 };
   o.plano = { ...o.plano, ancho: 16, largo: 12, fuente: { x: 1, y: 1 }, bombaUbicada: true, zonas: [[{ x: 2, y: 2 }, { x: 14, y: 2 }, { x: 14, y: 10 }, { x: 2, y: 10 }]] };
@@ -419,7 +419,10 @@ test('sugerir riego completo: plano aparte, la obra original no cambia, buena co
   const asps = O.aspersoresDelPlano(n);
   assert.ok(asps.every(a => G.enZonas(n.plano.zonas, a.x, a.y) || a.x === 2 || a.x === 14 || a.y === 2 || a.y === 10), 'todos en la zona o en su borde');
   const cob = G.cobertura(n.plano, asps, 0.25, n.plano.zonas);
-  assert.ok(cob.bien >= 90, `bien cubierto: ${cob.bien}`);
+  assert.ok(cob.bien >= 80 && cob.seco <= 3, `bien cubierto: ${cob.bien}, seco: ${cob.seco}`);
+  // Cuidando el costo (Darío: no sobredimensionar): 96 m² con pocos aspersores y un solo sector
+  assert.ok(asps.length <= 14, `aspersores: ${asps.length}`);
+  assert.equal(n.sectores.length, 1);
   for (const s of n.sectores) {
     const c = O.calcular(n, s);
     assert.ok(!c.error, c.error);
