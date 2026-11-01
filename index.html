@@ -143,6 +143,7 @@
 
     <!-- Plano -->
     <div id="panel-plano" class="panel">
+      <div id="propuesta-aviso" class="propuesta-aviso" hidden></div>
       <section class="tarjeta plano-tarjeta">
         <div class="modo-plano" role="tablist">
           <button type="button" data-modo="2d" aria-selected="true">Plano 2D</button>
@@ -176,6 +177,8 @@
         </div>
         <div id="plano-estadisticas" class="estadisticas"></div>
         <button id="diagrama-pdf" class="principal" type="button">Diagrama de instalación (PDF)</button>
+        <button id="proponer-riego" class="principal" type="button">Sugerir riego completo (plano aparte)</button>
+        <p class="ayuda" id="proponer-ayuda">La app arma su propio diseño en otro plano, para comparar con el tuyo. Tu plano no cambia.</p>
         <p class="ayuda leyenda" id="plano-leyenda"><i class="seco"></i> seco <i class="uno"></i> un solo aspersor <i class="bien"></i> bien cubierto (dos o más) · ▲ fuente · ■ válvula</p>
       </section>
 

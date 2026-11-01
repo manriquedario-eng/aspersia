@@ -448,3 +448,7 @@ input[type=date] { -webkit-appearance: none; appearance: none; width: 100%; disp
 /* Candado del plano */
 .plano-botones button.activo { background: var(--primario); color: #fff; border-color: var(--primario); }
 #diagrama-pdf { width: 100%; margin-top: 10px; }
+/* Propuesta de la app (Sugerir riego completo) */
+.propuesta-aviso { background: #FDF2F8; border: 1px solid #EC008C; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.95em; line-height: 1.4; }
+.propuesta-aviso .enlace { display: inline-block; margin-top: 6px; font-weight: 600; }
+#proponer-riego { width: 100%; margin-top: 10px; }

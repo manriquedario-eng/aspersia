@@ -239,6 +239,17 @@
   $('plano-filtro').addEventListener('click', () => { if (modoPlano === '3d') setTimeout(abrir3D, 0); });
 
   function abrirPlano() {
+    // Propuesta de la app: aviso arriba, con el resumen y el camino de vuelta al plano de Darío
+    const original = obra.propuestaDe && datos.obras.find(o => o.id === obra.propuestaDe);
+    $('propuesta-aviso').hidden = !obra.propuestaDe;
+    if (obra.propuestaDe) {
+      const p = obra.propuesta || {};
+      $('propuesta-aviso').innerHTML = `<b>Propuesta de la app, para comparar.</b> Tu obra no cambió.
+        ${escapar(p.boquilla || '')}: ${p.aspersores || '?'} aspersores en ${obra.sectores.length} sector${obra.sectores.length === 1 ? '' : 'es'} (la fuente da unos ${p.capacidad || '?'} l/min por sector), ${p.bien ?? '?'} % bien cubierto, sin mojar afuera de la zona.
+        Podés mirar su Diseño, Presupuesto y Diagrama como en cualquier obra, y retocarla.
+        ${original ? `<a class="enlace" href="#/obra/${original.id}/plano">Volver a mi plano</a>` : ''}`;
+    }
+    $('proponer-riego').hidden = $('proponer-ayuda').hidden = !!obra.propuestaDe;
     GEO.ubicarSinPosicion(obra.plano, obra.sectores);
     sincronizarDistancias();
     $('plano-ancho').value = obra.plano.ancho;
@@ -1084,6 +1095,22 @@
         if (!w) descargar(archivo);
       }
     } finally { b.disabled = false; b.textContent = 'Ver PDF'; }
+  });
+  // Sugerir riego completo: otra obra aparte (la de Darío no se toca). Si ya había una propuesta de esta obra, se reemplaza.
+  $('proponer-riego').addEventListener('click', ev => {
+    const b = ev.currentTarget, texto = b.textContent;
+    b.disabled = true; b.textContent = 'Armando la propuesta…';
+    setTimeout(() => {
+      try {
+        const n = O.proponerRiego(obra);
+        n.nombre = `Propuesta de la app · ${nombreObra(obra)}`;
+        datos.obras = datos.obras.filter(o => o.propuestaDe !== obra.id);
+        datos.obras.push(n);
+        A.guardar(datos);
+        ir(`#/obra/${n.id}/plano`);
+      } catch (err) { alert(err.message); }
+      finally { b.disabled = false; b.textContent = texto; }
+    }, 30);
   });
   // Diagrama de instalación: el plano a escala y, por sector, el recorrido del caño y cada aspersor con sus medidas
   $('diagrama-pdf').addEventListener('click', async ev => {
