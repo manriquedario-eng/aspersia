@@ -901,7 +901,7 @@
         const cambiada = r.auto && r.cantidad !== r.cantidadCalculada;
         html += `<div class="renglon ${r.precio ? '' : 'sin-precio'}" ${ref}>
           <div class="renglon-fila">
-            <input type="text" data-r="descripcion" value="${escapar(r.descripcion)}" ${dis} aria-label="Descripción">
+            <textarea data-r="descripcion" rows="2" ${dis} aria-label="Descripción">${escapar(r.descripcion)}</textarea>
             ${fijo ? '' : '<button type="button" class="quitar" data-r="quitar" aria-label="Quitar renglón">×</button>'}
           </div>
           <div class="renglon-numeros">
@@ -915,6 +915,7 @@
       }
     }
     $('renglones').innerHTML = html || '<p class="ayuda">Cargá aspersores en el diseño para que aparezcan los materiales.</p>';
+    $('renglones').querySelectorAll('textarea[data-r="descripcion"]').forEach(crecer);
     $('quitados').innerHTML = !fijo && pre.quitados.length
       ? `<p class="ayuda">Quitados: ${pre.quitados.map(r => `${escapar(r.descripcion)} <button type="button" class="enlace" data-reponer="${escapar(r.clave)}">volver a agregar</button>`).join(' · ')}</p>` : '';
   }
@@ -930,7 +931,10 @@
   }
 
   // Cambios en los renglones: mientras escribe se recalculan importe y total sin rearmar la lista (no pierde el foco).
+  // El detalle de cada renglón crece con lo que se escribe: se ve todo el texto, sin correrse de costado
+  function crecer(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 2 + 'px'; }
   $('renglones').addEventListener('input', ev => {
+    if (ev.target.matches('textarea[data-r="descripcion"]')) crecer(ev.target);
     const campo = ev.target.dataset.r;
     const fila = ev.target.closest('.renglon');
     if (!campo || !fila || cerrado()) return;

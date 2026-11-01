@@ -425,3 +425,6 @@ input[type=date] { -webkit-appearance: none; appearance: none; width: 100%; disp
 .cliente-item { flex-wrap: wrap; align-items: flex-start; }
 .acciones-cliente { display: flex; flex-wrap: wrap; gap: 6px; }
 .acciones-cliente .chico { margin: 0; }
+/* Detalle del renglón: cuadro grande de varias líneas */
+.renglon-fila { align-items: flex-start; }
+.renglon-fila textarea { flex: 1; min-width: 0; font-weight: 600; font-size: 16px; line-height: 1.35; min-height: 3.2em; resize: none; overflow: hidden; }
