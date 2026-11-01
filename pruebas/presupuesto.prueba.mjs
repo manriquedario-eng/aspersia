@@ -53,7 +53,7 @@ test('materiales: cuenta cuerpos, boquillas, turbinas, válvulas, caños y progr
   assert.equal(q('boq-MPR-30-90'), 1);
   assert.equal(q('valvula-pgv-1'), 2);
   assert.equal(q('caja-valvulas'), 1);
-  assert.equal(q('programador-2'), 1);
+  assert.equal(q('programador-x2-4'), 1);
   assert.equal(q('conexion-aspersor'), 6);
   // Caño 25: lateral del Frente 2 + 3,7 + 3,7 + 4 = 13,4 m + 10 % = 14,74 → 15 m
   assert.equal(q('cano-pead-pn6-25'), 15);
@@ -70,8 +70,8 @@ test('mano de obra por m²: usa la superficie cargada y estima la que falta', ()
   // Frente estimado + Fondo cargado (150 m²)
   assert.equal(m.m2, Math.round(estimado + 150));
   assert.equal(m.m2Estimados, true);
-  assert.equal(porClave(m.renglones, 'mo-m2').cantidad, m.m2);
-  assert.equal(porClave(m.renglones, 'mo-m2').unidad, 'm²');
+  assert.equal(porClave(m.renglones, 'mo-obra').cantidad, 1);
+  assert.match(porClave(m.renglones, 'mo-obra').descripcion, new RegExp(`unos ${m.m2} m²`));
   // Estimación: una boquilla 12 a 180° con 2,1 bar en la boquilla alcanza 3,7 m → 3,7² × 180/360
   const unaSola = { aspersores: [{ emisor: R.emisor('pro-12-180'), radio: 3.7 }] };
   assert.ok(Math.abs(P.superficieEstimada(unaSola, [{}]) - 3.7 * 3.7 / 2) < 1e-9);
@@ -80,7 +80,7 @@ test('mano de obra por m²: usa la superficie cargada y estima la que falta', ()
 test('presupuesto: precios de la lista, cambios de la obra, renglones propios, descuento e IVA', () => {
   const obra = obraEjemplo();
   obra.sectores[0].superficie = 50;
-  const precios = { 'cuerpo-prs30': 10000, 'boq-pro-12-180': 3000, 'mo-m2': 2000, 'cano-pead-pn6-25': 1500 };
+  const precios = { 'cuerpo-prs30': 10000, 'boq-pro-12-180': 3000, 'cano-pead-pn6-25': 1500 };
   obra.presupuesto = {
     desperdicio: 10,
     cambios: { 'cano-pead-pn6-25': { cantidad: 20 }, 'caja-valvulas': { quitar: true }, 'boq-pro-12-180': { descripcion: 'Boquilla 12H' } },
@@ -94,12 +94,18 @@ test('presupuesto: precios de la lista, cambios de la obra, renglones propios, d
   assert.equal(porClave(p.renglones, 'caja-valvulas'), undefined, 'el renglón quitado no aparece');
   assert.equal(p.quitados.length, 1);
   assert.equal(porClave(p.renglones, 'boq-pro-12-180').descripcion, 'Boquilla 12H');
-  assert.equal(porClave(p.renglones, 'mo-m2').importe, 200 * 2000, '50 m² del Frente + 150 m² del Fondo');
   const materiales = 30000 + 6000 + 30000;
   assert.equal(p.subtotales['Materiales'], materiales);
-  assert.equal(p.subtotales['Mano de obra'], 400000);
+  // Mano de obra: por defecto el 200 % de los materiales a precio de venta (Darío)
+  assert.equal(porClave(p.renglones, 'mo-obra').importe, materiales * 2);
+  assert.equal(p.subtotales['Mano de obra'], materiales * 2);
   assert.equal(p.subtotales['Otros'], 45000);
-  assert.equal(p.subtotal, materiales + 400000 + 45000);
+  assert.equal(p.subtotal, materiales * 3 + 45000);
+  // Terreno con piedra: +30 %; o un importe fijo
+  obra.presupuesto.manoObra = { porcentaje: 200, ajuste: 30 };
+  assert.equal(porClave(P.armarPresupuesto(obra, precios, paraCalcular(obra)).renglones, 'mo-obra').importe, materiales * 2 * 1.3);
+  obra.presupuesto.manoObra = { fijo: 100000 };
+  assert.equal(porClave(P.armarPresupuesto(obra, precios, paraCalcular(obra)).renglones, 'mo-obra').importe, 100000);
   assert.equal(p.descuento, p.subtotal * 0.1);
   assert.equal(p.iva, Math.round((p.subtotal - p.descuento) * 0.21 * 100) / 100);
   assert.equal(p.total, p.subtotal - p.descuento + p.iva);
@@ -108,11 +114,11 @@ test('presupuesto: precios de la lista, cambios de la obra, renglones propios, d
 
 test('presupuesto congelado: no cambia aunque cambien el diseño o los precios', () => {
   const obra = obraEjemplo();
-  const precios = { 'mo-m2': 2000 };
+  const precios = { 'cuerpo-prs30': 2000 };
   const antes = P.armarPresupuesto(obra, precios, paraCalcular(obra));
   obra.presupuesto.congelado = antes;
   obra.sectores[0].aspersores.push({ emisor: 'pro-12-180', regulador: 'PRS30', distancia: 3 });
-  precios['mo-m2'] = 9999;
+  precios['cuerpo-prs30'] = 9999;
   assert.equal(P.armarPresupuesto(obra, precios, paraCalcular(obra)).total, antes.total);
 });
 

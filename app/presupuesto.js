@@ -161,7 +161,13 @@
     if (valvulas) {
       sumar('valvula-pgv-1', 'Materiales', 'Electroválvula Hunter PGV-101 de 1"', 'u', valvulas);
       sumar('caja-valvulas', 'Materiales', 'Caja para válvulas con tapa', 'u', 1);
-      sumar(`programador-${valvulas}`, 'Materiales', `Programador Hunter de ${valvulas} ${valvulas === 1 ? 'estación' : 'estaciones'}`, 'u', 1);
+      // Programador residencial Hunter X2 (catálogo 2026): de 4, 6, 8 o 14 estaciones; en 230 V, modelo X2-N01-E.
+      const x2 = [4, 6, 8, 14].find(n => n >= valvulas);
+      if (x2) sumar(`programador-x2-${x2}`, 'Materiales', `Programador Hunter X2 de ${x2} estaciones (X2-${x2}01-E, 230 V)`, 'u', 1);
+      else {
+        sumar(`programador-${valvulas}`, 'Materiales', `Programador Hunter comercial de ${valvulas} estaciones (Pro-C o HPC con módulos)`, 'u', 1);
+        notas.push('Más de 14 sectores: el X2 no alcanza, va un programador comercial (Pro-C o HPC con módulos de estaciones).');
+      }
     }
     let metrosZanja = 0;
     for (const c of canos.values()) {
@@ -179,7 +185,7 @@
       m2 = zonas.reduce((t, z) => t + Math.abs(z.reduce((u, p, k) => { const q = z[(k + 1) % z.length]; return u + p.x * q.y - q.x * p.y; }, 0)) / 2, 0);
       m2Estimados = false;
     }
-    sumar('mo-m2', 'Mano de obra', 'Mano de obra de instalación del riego', 'm²', Math.round(m2));
+    sumar('mo-obra', 'Mano de obra', `Mano de obra de instalación del riego${m2 ? ` (unos ${Math.round(m2)} m²)` : ''}`, 'gl', 1);
     if (m2Estimados) notas.push('Hay sectores sin superficie cargada: los m² se estimaron con el alcance de los aspersores.');
 
     return { renglones: [...suma.values()], aspersores, valvulas, metrosZanja, m2: Math.round(m2), m2Estimados, notas };
@@ -208,6 +214,20 @@
     }
     for (const r of p.propios || []) renglones.push({ ...r, auto: false });
     for (const r of renglones) r.importe = redondear((r.cantidad || 0) * (r.precio || 0));
+    // Mano de obra de riego (Darío): por defecto el 200 % de los materiales a precio de venta, más o menos un ajuste
+    // por el terreno (piedra, etc.); también se puede poner un importe fijo.
+    const mo = renglones.find(r => r.clave === 'mo-obra');
+    const materiales = renglones.filter(r => r.rubro === 'Materiales').reduce((t, r) => t + r.importe, 0);
+    const manoObra = { porcentaje: 200, ajuste: 0, fijo: null, ...(p.manoObra || {}) };
+    if (mo) {
+      mo.precio = manoObra.fijo != null ? manoObra.fijo : redondear(materiales * manoObra.porcentaje / 100 * (1 + manoObra.ajuste / 100));
+      mo.cantidad = 1;
+      mo.importe = mo.precio;
+    }
+    // Utilidad: lo que cuestan los materiales (lista de costos) contra lo que se cobra
+    const costos = global.PRESUPUESTO_COSTOS || {};
+    const costoMateriales = renglones.filter(r => r.rubro === 'Materiales').reduce((t, r) => t + (r.cantidad || 0) * (r.clave ? (costos[r.clave] || 0) : (r.costo || 0)), 0);
+    const sinCosto = renglones.filter(r => r.rubro === 'Materiales' && r.cantidad && r.clave && !costos[r.clave]).length;
 
     const subtotales = Object.fromEntries(RUBROS.map(rb => [rb, renglones.filter(r => r.rubro === rb).reduce((t, r) => t + r.importe, 0)]));
     const subtotal = Object.values(subtotales).reduce((a, b) => a + b, 0);
@@ -220,6 +240,7 @@
     return {
       renglones, quitados, subtotales, subtotal, descuento, descuentoPct: p.descuento || 0, neto, iva, total: neto + iva,
       sinPrecio: renglones.filter(r => !r.precio && r.cantidad).length,
+      manoObra, materiales, costoMateriales: redondear(costoMateriales), sinCosto, utilidad: redondear(neto - costoMateriales),
       datos: {
         aspersores: m.aspersores, valvulas: m.valvulas, metrosZanja: m.metrosZanja, m2: m.m2, m2Estimados: m.m2Estimados,
         sectores: obra.sectores.map(s => ({ nombre: s.nombre, aspersores: s.aspersores.length })),

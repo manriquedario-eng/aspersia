@@ -41,6 +41,7 @@
       </div>
     </section>
     <nav class="menu">
+      <a href="#/clientes" class="menu-item"><b>Clientes</b><span>Sus datos y sus obras; presupuesto nuevo sin volver a escribir</span></a>
       <a href="#/caja" class="menu-item"><b>Caja</b><span>Cobros, gastos y ganancia de cada mes</span></a>
       <a href="#/precios" class="menu-item"><b>Lista de precios</b><span>Lo que cobrás por cada material y por m²</span></a>
       <a href="#/datos" class="menu-item"><b>Mis datos</b><span>Lo que sale arriba en tus presupuestos</span></a>
@@ -66,7 +67,7 @@
       <section class="tarjeta">
         <h2>Cliente</h2>
         <div class="campos">
-          <label>Nombre y apellido <input data-cliente="nombre" type="text" autocomplete="off" placeholder="Juan Pérez"></label>
+          <label>Nombre y apellido <input data-cliente="nombre" type="text" autocomplete="off" list="clientes-guardados" placeholder="Juan Pérez"><datalist id="clientes-guardados"></datalist></label>
           <label>Dirección <input data-cliente="direccion" type="text" autocomplete="off" placeholder="Av. San Martín 1234"></label>
           <label>Localidad <input data-cliente="localidad" type="text" autocomplete="off" placeholder="Rosario"></label>
           <div class="campos dos">
@@ -227,6 +228,15 @@
           <label>Fecha <input id="pre-fecha" type="date"></label>
           <label>Validez <span class="unidad">días</span><input id="pre-validez" type="number" inputmode="numeric" min="1" step="1"></label>
         </div>
+        <div id="mo-caja" hidden>
+          <h3 class="rubro">Mano de obra</h3>
+          <div class="campos dos">
+            <label>% de los materiales <input id="mo-porcentaje" type="text" inputmode="decimal" autocomplete="off"></label>
+            <label>Ajuste por terreno <span class="unidad">% (piedra: +30)</span><input id="mo-ajuste" type="text" inputmode="decimal" autocomplete="off"></label>
+            <label class="ancho">O un importe fijo <span class="unidad">$ (vacío = automático)</span><input id="mo-fijo" type="text" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <p id="mo-ayuda" class="ayuda"></p>
+        </div>
         <div id="pre-horas-caja" hidden>
           <label>Horas trabajadas <span class="unidad">h</span><input id="pre-horas" type="text" inputmode="decimal" autocomplete="off" min="0" step="0.5"></label>
           <p id="pre-horas-ayuda" class="ayuda"></p>
@@ -300,6 +310,16 @@
     </div>
   </div>
 
+  <!-- ===================== Clientes ===================== -->
+  <div id="vista-clientes" class="vista" hidden>
+    <a href="#/" class="volver">‹ Obras</a>
+    <section class="tarjeta">
+      <h2>Clientes</h2>
+      <p class="ayuda arriba">Se arman solos con tus obras. Desde acá empezás un mantenimiento u otra obra con los datos del cliente ya cargados.</p>
+      <ul id="lista-clientes" class="movimientos"></ul>
+    </section>
+  </div>
+
   <!-- ===================== Caja: todas las obras ===================== -->
   <div id="vista-caja" class="vista" hidden>
     <a href="#/" class="volver">‹ Obras</a>
@@ -371,7 +391,11 @@
     <a href="#/" class="volver">‹ Obras</a>
     <section class="tarjeta">
       <h2>Lista de precios</h2>
-      <p class="ayuda arriba">Precio por unidad, en pesos. Se usa en todas las obras nuevas y en las que no están cerradas. Aparecen los materiales que usaste en tus obras.</p>
+      <p class="ayuda arriba">Cargá lo que te cuesta cada material: el precio de venta se calcula con el índice (y lo podés cambiar a mano). Las obras usan el precio de venta.</p>
+      <div class="campos dos">
+        <label>Índice de venta <span class="unidad">% sobre el costo</span><input id="indice-venta" type="text" inputmode="decimal" autocomplete="off"></label>
+        <button id="aplicar-indice" class="chico" type="button">Aplicar el índice a todos</button>
+      </div>
       <div id="lista-precios"></div>
     </section>
   </div>

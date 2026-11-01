@@ -127,7 +127,7 @@ test('presupuesto: materiales coherentes con el diseño', () => {
   assert.equal(q('turbina-pgp-ultra'), 2);
   assert.equal(q('boq-MPR-30-90'), 1);
   assert.equal(q('valvula-pgv-1'), 2);
-  assert.equal(q('programador-2'), 1);
+  assert.equal(q('programador-x2-4'), 1, '2 sectores: Hunter X2 de 4 estaciones');
   // Conexión al caño: 4 con manguera (conector inicial + espiga) y la turbina con MPR directo al caño
   assert.equal(q('conector-inicial-pe-12'), 4);
   assert.equal(q('espiga-l-pe-12-½"'), 3, 'MP y ajustable: cuerpo Pro-Spray de ½"');
@@ -141,14 +141,15 @@ test('presupuesto: materiales coherentes con el diseño', () => {
   // m²: Fondo cargado (160) + Frente estimado con el alcance real de cada aspersor
   const cFrente = O.calcular(o, o.sectores[0]);
   const estimado = P.superficieEstimada(cFrente.r, o.sectores[0].aspersores);
-  assert.equal(q('mo-m2'), Math.round(estimado + 160));
+  assert.equal(q('mo-obra'), 1);
+  assert.match(pre.renglones.find(r => r.clave === 'mo-obra').descripcion, new RegExp(`unos ${Math.round(estimado + 160)} m²`));
   assert.equal(pre.datos.aspersores, 5);
   assert.deepEqual(pre.datos.sectores, [{ nombre: 'Frente', aspersores: 3 }, { nombre: 'Fondo', aspersores: 2 }]);
 });
 
 test('presupuesto cerrado: no cambia con el diseño ni con los precios, y el PDF tampoco', async () => {
   const { o, datos } = obraDePrueba();
-  datos.precios = { 'mo-m2': 3000, 'turbina-pgp-ultra': 40000, 'cuerpo-prs40': 15000 };
+  datos.precios = { 'turbina-pgp-ultra': 40000, 'cuerpo-prs40': 15000 };
   o.presupuesto.descuento = 10;
   const antes = O.presupuesto(o, datos.precios);
   o.presupuesto.congelado = { ...antes, fechaCierre: '2026-10-30' };
@@ -156,7 +157,7 @@ test('presupuesto cerrado: no cambia con el diseño ni con los precios, y el PDF
   // Cambios después de enviar
   o.sectores.push({ ...A.sectorNuevo(3), nombre: 'Lateral' });
   o.sectores[0].nombre = 'Otro nombre';
-  datos.precios['mo-m2'] = 9999;
+  datos.precios['turbina-pgp-ultra'] = 99999;
   o.presupuesto.descuento = 50;
   const despues = O.presupuesto(o, datos.precios);
   assert.equal(despues.total, antes.total);
@@ -288,7 +289,7 @@ test('zonas: la mano de obra usa los m² dibujados; los aspersores sin ubicar no
   o.plano.zonas = [[{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 6 }, { x: 0, y: 6 }], [{ x: 12, y: 0 }, { x: 16, y: 0 }, { x: 14, y: 4 }]];
   assert.equal(O.superficieZonas(o), 60 + 8);
   const pre = O.presupuesto(o, {});
-  assert.equal(pre.renglones.find(r => r.clave === 'mo-m2').cantidad, 68);
+  assert.match(pre.renglones.find(r => r.clave === 'mo-obra').descripcion, /unos 68 m²/);
   // Un sector nuevo arranca vacío y no da error en el presupuesto
   assert.equal(A.sectorNuevo(3).aspersores.length, 0);
   o.sectores.push(A.sectorNuevo(3));

@@ -19,6 +19,8 @@
   document.querySelectorAll('[data-nube-nombre]').forEach(e => { e.textContent = EQUIPO === 'otro' ? 'tu computadora' : NUBE; });
 
   const datos = await A.abrir();
+  datos.costos ||= {};
+  window.PRESUPUESTO_COSTOS = datos.costos;   // lista de costos (para la ganancia del presupuesto)
   let obra = null;          // obra abierta
   let nSector = null;       // índice del sector abierto
   let pendiente = null;
@@ -93,7 +95,7 @@
   // =====================================================================
   // Navegación
   // =====================================================================
-  const VISTAS = ['inicio', 'obra', 'sector', 'precios', 'datos', 'copia', 'caja'];
+  const VISTAS = ['inicio', 'obra', 'sector', 'precios', 'datos', 'copia', 'caja', 'clientes'];
   function mostrar(vista) {
     for (const v of VISTAS) $(`vista-${v}`).hidden = v !== vista;
     window.scrollTo(0, 0);
@@ -122,6 +124,7 @@
     if (seccion === 'precios') { mostrar('precios'); subtitulo('Lista de precios'); return pintarPrecios(); }
     if (seccion === 'datos') { mostrar('datos'); subtitulo('Mis datos'); return pintarDatos(); }
     if (seccion === 'copia') { mostrar('copia'); subtitulo('Copia de seguridad'); return pintarCopia(); }
+    if (seccion === 'clientes') { mostrar('clientes'); subtitulo('Clientes'); return pintarClientes(); }
     if (seccion === 'caja') { mostrar('caja'); subtitulo('Caja'); return pintarCaja(); }
     mostrar('inicio'); subtitulo('Riegos Tecnológicos'); pintarInicio(); pintarRecordatorio();
     // Versión guardada en el teléfono (para saber si ya se actualizó)
@@ -439,10 +442,56 @@
     $('obra-nombre').value = obra.nombre;
     $('obra-nombre').placeholder = obra.cliente.nombre ? `Casa ${obra.cliente.nombre.trim().split(' ').at(-1)}` : 'Casa Pérez';
     opciones($('obra-estado'), A.ESTADOS.map(e => [e, e]), obra.estado);
+    sugerirClientes();
     $('trabajo-caja').hidden = obra.tipo !== 'mantenimiento';
     $('obra-trabajo').value = obra.trabajo || '';
   }
   $('obra-trabajo').addEventListener('input', ev => { obra.trabajo = ev.target.value; guardar(); });
+  // ---------- Clientes guardados (salen de las obras: el dato más reciente de cada nombre) ----------
+  const clave = n => (n || '').trim().toLowerCase();
+  function clientes() {
+    const mapa = new Map();
+    const obras = [...datos.obras].sort((a, b) => (b.actualizada || '').localeCompare(a.actualizada || ''));
+    for (const o of obras) {
+      const k = clave(o.cliente?.nombre);
+      if (!k) continue;
+      if (!mapa.has(k)) mapa.set(k, { cliente: { ...o.cliente }, obras: [] });
+      mapa.get(k).obras.push(o);
+    }
+    return [...mapa.values()].sort((a, b) => a.cliente.nombre.localeCompare(b.cliente.nombre));
+  }
+  function pintarClientes() {
+    const lista = clientes();
+    $('lista-clientes').innerHTML = lista.length ? lista.map((c, n) => `<li class="cliente-item"><span>
+        <b>${escapar(c.cliente.nombre)}</b><br><span class="ayuda">${escapar([c.cliente.direccion, c.cliente.localidad, c.cliente.telefono].filter(Boolean).join(' · ') || 'Sin más datos')}</span><br>
+        ${c.obras.map(o => `<a class="enlace" href="#/obra/${o.id}/${o.tipo === 'mantenimiento' ? 'presupuesto' : 'plano'}">N° ${PDF.numeroTexto(o.presupuesto.numero)} · ${o.tipo === 'mantenimiento' ? 'Mantenimiento' : 'Riego'} · ${escapar(o.estado)}</a>`).join('<br>')}</span>
+        <span class="acciones-cliente"><button type="button" class="chico" data-cliente-nuevo="${n}" data-tipo="mantenimiento">+ Mantenimiento</button>
+        <button type="button" class="chico" data-cliente-nuevo="${n}" data-tipo="riego">+ Obra de riego</button></span></li>`).join('')
+      : '<li class="ayuda">Todavía no hay clientes: aparecen cuando cargás el nombre en una obra.</li>';
+  }
+  $('lista-clientes').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-cliente-nuevo]');
+    if (!b) return;
+    const c = clientes()[Number(b.dataset.clienteNuevo)];
+    const o = A.obraNueva(datos, b.dataset.tipo);
+    o.cliente = { ...c.cliente };
+    datos.obras.push(o);
+    A.guardar(datos);
+    ir(`#/obra/${o.id}/${b.dataset.tipo === 'mantenimiento' ? 'cliente' : 'plano'}`);
+  });
+  // Al escribir el nombre, sugiere los clientes guardados; si se elige uno, completa sus datos
+  function sugerirClientes() {
+    $('clientes-guardados').innerHTML = clientes().map(c => `<option value="${escapar(c.cliente.nombre)}">`).join('');
+  }
+  document.querySelector('[data-cliente="nombre"]').addEventListener('change', ev => {
+    // Los datos salen de la obra más reciente de ese cliente (sin contar la que se está cargando)
+    const otra = datos.obras.filter(o => o !== obra && clave(o.cliente?.nombre) === clave(ev.target.value))
+      .sort((a, b) => (b.actualizada || '').localeCompare(a.actualizada || ''))[0];
+    if (!otra) return;
+    for (const campo of ['direccion', 'localidad', 'telefono', 'correo']) if (!obra.cliente[campo]) obra.cliente[campo] = otra.cliente[campo] || '';
+    obra.cliente.nombre = otra.cliente.nombre;
+    guardar(); pintarCliente();
+  });
   document.querySelectorAll('[data-cliente]').forEach(i => i.addEventListener('input', () => {
     obra.cliente[i.dataset.cliente] = i.value;
     if (i.dataset.cliente === 'nombre') $('obra-nombre').placeholder = i.value ? `Casa ${i.value.trim().split(' ').at(-1)}` : 'Casa Pérez';
@@ -796,6 +845,13 @@
     const mant = obra.tipo === 'mantenimiento';
     $('agregar-renglon').textContent = mant ? '+ Agregar material' : '+ Agregar renglón propio';
     $('pre-horas-caja').hidden = !mant;
+    $('mo-caja').hidden = mant;
+    if (!mant) {
+      const m = pre.manoObra || {};
+      $('mo-porcentaje').value = m.porcentaje ?? 200; $('mo-ajuste').value = m.ajuste ?? 0; $('mo-fijo').value = m.fijo ?? '';
+      for (const id of ['mo-porcentaje', 'mo-ajuste', 'mo-fijo']) $(id).disabled = fijo;
+      $('mo-ayuda').textContent = `Materiales a precio de venta: ${P.pesos(pre.materiales || 0)}. Mano de obra: ${P.pesos(pre.renglones.find(r => r.clave === 'mo-obra')?.importe || 0)}${m.fijo != null ? ' (importe fijo)' : ''}.`;
+    }
     if (mant) {
       const horas = p.cambios['mo-hora']?.cantidad ?? obra.horas ?? 1, precio = datos.precios['mo-hora'] || 0;
       $('pre-horas').value = horas;
@@ -842,7 +898,8 @@
     const filas = P.RUBROS.filter(rb => pre.subtotales[rb]).map(rb => `<tr><td>${rb}</td><td>${P.pesos(pre.subtotales[rb])}</td></tr>`);
     if (pre.descuento) filas.push(`<tr><td>Descuento ${fmt(pre.descuentoPct ?? obra.presupuesto.descuento, 0)} %</td><td>− ${P.pesos(pre.descuento)}</td></tr>`);
     if (pre.iva) filas.push(`<tr><td>IVA ${P.IVA} %</td><td>${P.pesos(pre.iva)}</td></tr>`);
-    $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${P.pesos(pre.total)}</td></tr></table>
+    const ganancia = pre.costoMateriales > 0 ? `<p class="ayuda">Para vos (no sale en el PDF): los materiales te cuestan ${P.pesos(pre.costoMateriales)}; ganancia estimada ${P.pesos(pre.utilidad)}${pre.neto ? ` (${fmt(pre.utilidad / pre.neto * 100, 0)} % de lo que cobrás sin IVA)` : ''}${pre.sinCosto ? `. Ojo: ${pre.sinCosto} material${pre.sinCosto === 1 ? '' : 'es'} sin costo cargado` : ''}.</p>` : '';
+    $('totales').innerHTML = `<table class="totales">${filas.join('')}<tr class="total-final"><td>Total</td><td>${P.pesos(pre.total)}</td></tr></table>${ganancia}
       ${pre.sinPrecio ? `<ul class="avisos"><li class="aviso">${pre.sinPrecio} renglón${pre.sinPrecio === 1 ? '' : 'es'} sin precio: no sale${pre.sinPrecio === 1 ? '' : 'n'} en el PDF hasta que le pongas uno.</li></ul>` : ''}`;
   }
 
@@ -854,7 +911,8 @@
     const p = obra.presupuesto;
     if (fila.dataset.clave) {
       const clave = fila.dataset.clave;
-      if (campo === 'precio') datos.precios[clave] = decimal(ev.target.value);
+      if (campo === 'precio' && clave === 'mo-obra') { (p.manoObra ||= {}).fijo = decimal(ev.target.value); $('mo-fijo').value = p.manoObra.fijo; }
+      else if (campo === 'precio') datos.precios[clave] = decimal(ev.target.value);
       else { p.cambios[clave] ||= {}; p.cambios[clave][campo] = campo === 'cantidad' ? decimal(ev.target.value) : ev.target.value; }
     } else {
       const r = p.propios.find(x => x.id === fila.dataset.propio);
@@ -885,6 +943,13 @@
     delete obra.presupuesto.cambios[clave].quitar;
     guardar(); pintarPresupuesto();
   });
+  for (const [id, campo] of [['mo-porcentaje', 'porcentaje'], ['mo-ajuste', 'ajuste'], ['mo-fijo', 'fijo']])
+    $(id).addEventListener('change', ev => {
+      const p = obra.presupuesto, v = ev.target.value.trim();
+      p.manoObra ||= {};
+      p.manoObra[campo] = campo === 'fijo' && v === '' ? null : decimal(v);
+      guardar(); pintarPresupuesto();
+    });
   $('pre-horas').addEventListener('change', ev => {
     obra.horas = Math.max(0, decimal(ev.target.value));
     if (obra.presupuesto.cambios['mo-hora']) delete obra.presupuesto.cambios['mo-hora'].cantidad;
@@ -975,7 +1040,8 @@
   ];
   function pintarPrecios() {
     // Materiales que aparecen en las obras, más la mano de obra por m² aunque no haya obras.
-    const items = new Map([['mo-m2', { descripcion: 'Mano de obra de instalación del riego', unidad: 'm²' }], ['mo-hora', { descripcion: 'Hora de trabajo (mantenimiento y reparaciones)', unidad: 'h' }]]);
+    const items = new Map([['mo-hora', { descripcion: 'Hora de trabajo (mantenimiento y reparaciones)', unidad: 'h' }]]);
+    $('indice-venta').value = datos.indiceVenta ?? 40;
     for (const o of datos.obras) {
       try { for (const r of P.materialesDeObra(o, sectorParaCalcular(o)).renglones) items.set(r.clave, { descripcion: r.descripcion, unidad: r.unidad }); } catch { /* obra con error */ }
     }
@@ -986,18 +1052,31 @@
       if (!claves.length) continue;
       claves.forEach(c => usados.add(c));
       html += `<h3 class="rubro">${grupo}</h3>` + claves.map(c => {
-        const it = items.get(c);
-        return `<label class="precio-item">${escapar(it.descripcion)} <span class="unidad">$ por ${escapar(it.unidad)}</span>
-          <input type="text" inputmode="decimal" autocomplete="off" min="0" step="any" data-precio="${escapar(c)}" value="${datos.precios[c] || ''}" placeholder="sin precio"></label>`;
+        const it = items.get(c), conCosto = !c.startsWith('mo-');
+        return `<div class="precio-item"><span>${escapar(it.descripcion)} <span class="unidad">$ por ${escapar(it.unidad)}</span></span>
+          <div class="campos dos">${conCosto ? `<label>Costo <input type="text" inputmode="decimal" autocomplete="off" data-costo="${escapar(c)}" value="${datos.costos[c] || ''}" placeholder="costo"></label>` : '<span></span>'}
+          <label>Venta <input type="text" inputmode="decimal" autocomplete="off" data-precio="${escapar(c)}" value="${datos.precios[c] || ''}" placeholder="sin precio"></label></div></div>`;
       }).join('');
     }
     $('lista-precios').innerHTML = html;
   }
   $('lista-precios').addEventListener('input', ev => {
-    const c = ev.target.dataset.precio;
-    if (!c) return;
-    datos.precios[c] = decimal(ev.target.value);
+    const c = ev.target.dataset.precio, k = ev.target.dataset.costo;
+    if (c) datos.precios[c] = decimal(ev.target.value);
+    if (k) {
+      // Al cargar el costo, la venta se calcula con el índice (se puede cambiar a mano)
+      datos.costos[k] = decimal(ev.target.value);
+      const venta = Math.round(datos.costos[k] * (1 + (datos.indiceVenta ?? 40) / 100));
+      datos.precios[k] = venta;
+      const v = $('lista-precios').querySelector(`[data-precio="${CSS.escape(k)}"]`);
+      if (v) v.value = venta || '';
+    }
     guardar();
+  });
+  $('indice-venta').addEventListener('change', ev => { datos.indiceVenta = decimal(ev.target.value); guardar(); });
+  $('aplicar-indice').addEventListener('click', () => {
+    for (const [k, costo] of Object.entries(datos.costos)) if (costo > 0) datos.precios[k] = Math.round(costo * (1 + (datos.indiceVenta ?? 40) / 100));
+    guardar(); pintarPrecios();
   });
 
   // =====================================================================

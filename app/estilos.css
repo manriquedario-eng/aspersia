@@ -419,3 +419,9 @@ input[type=date] { -webkit-appearance: none; appearance: none; width: 100%; disp
 .etiqueta-campo { font-size: .85rem; color: var(--suave); margin: 10px 0 4px; }
 /* Zoom en una fila arriba del plano (no encima de la foto) */
 #plano-botones { position: static; display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }
+/* Lista de precios con costo y venta */
+.precio-item { display: block; padding: 8px 0; border-bottom: 1px solid var(--linea); }
+.precio-item .campos { margin-top: 6px; }
+.cliente-item { flex-wrap: wrap; align-items: flex-start; }
+.acciones-cliente { display: flex; flex-wrap: wrap; gap: 6px; }
+.acciones-cliente .chico { margin: 0; }
